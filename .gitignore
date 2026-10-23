@@ -1,0 +1,8 @@
+# Dependencies and build output
+node_modules/
+dist/
+.angular/
+
+# Local database (created and seeded on startup)
+*.db
+*.db.bin
