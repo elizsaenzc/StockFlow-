@@ -8,6 +8,8 @@ import { MatTableModule }           from '@angular/material/table';
 import { MatListModule }            from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule }         from '@angular/material/tooltip';
+import { MatDialog }                from '@angular/material/dialog';
+import { ArticuloDetalleDialog }    from '../products/articulo-detalle.dialog';
 import { BaseChartDirective }       from 'ng2-charts';
 import { ChartConfiguration }       from 'chart.js';
 import { ApiService }               from '../../core/services/api.service';
@@ -81,8 +83,8 @@ import { ESTADO_PEDIDO, TIPO_MOVIMIENTO, desconocido } from '../../shared/estado
                 } @else {
                   <mat-list>
                     @for (a of d.articulosCriticos; track a.id) {
-                      <mat-list-item>
-                        <mat-icon matListItemIcon [class]="a.stock === 0 ? 'salida' : 'aviso'">{{ a.stock === 0 ? 'block' : 'warning' }}</mat-icon>
+                      <mat-list-item class="clicable" (click)="ficha(a.id)">
+                        <span matListItemIcon [class]="'app-ico ' + (a.stock === 0 ? 'bg-red' : 'bg-orange')"><mat-icon>{{ a.stock === 0 ? 'block' : 'warning' }}</mat-icon></span>
                         <span matListItemTitle>{{ a.nombre }}</span>
                         <span matListItemLine>{{ a.stock }} {{ a.unidad }} · mínimo {{ a.stock_minimo }}</span>
                       </mat-list-item>
@@ -122,7 +124,7 @@ import { ESTADO_PEDIDO, TIPO_MOVIMIENTO, desconocido } from '../../shared/estado
                     <td mat-cell *matCellDef="let m" class="secundario">{{ m.fecha | date:'d MMM, HH:mm' }}</td>
                   </ng-container>
                   <tr mat-header-row *matHeaderRowDef="columnasMov"></tr>
-                  <tr mat-row *matRowDef="let row; columns: columnasMov"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasMov" class="clicable" (click)="ficha(row.articulo_id)"></tr>
                 </table>
               </mat-card-content>
             </mat-card>
@@ -133,7 +135,7 @@ import { ESTADO_PEDIDO, TIPO_MOVIMIENTO, desconocido } from '../../shared/estado
                 <mat-card-content>
                   <mat-list>
                     @for (a of d.masMovidos; track a.id; let i = $index) {
-                      <mat-list-item>
+                      <mat-list-item class="clicable" (click)="ficha(a.id)">
                         <span matListItemAvatar class="puesto">{{ i + 1 }}</span>
                         <span matListItemTitle>{{ a.nombre }}</span>
                         <span matListItemLine>{{ a.referencia }} · {{ a.num_movimientos }} movimientos</span>
@@ -169,7 +171,7 @@ import { ESTADO_PEDIDO, TIPO_MOVIMIENTO, desconocido } from '../../shared/estado
     </div>
   `,
   styles: [`
-    .grafica { height: 260px; position: relative; }
+    .grafica { height: 340px; position: relative; }
     .aviso { color: var(--sf-warn); }
     .puesto { display: flex; align-items: center; justify-content: center; background: var(--sf-primary-50);
               color: var(--sf-primary); font-weight: 500; font-size: 14px; }
@@ -178,6 +180,7 @@ import { ESTADO_PEDIDO, TIPO_MOVIMIENTO, desconocido } from '../../shared/estado
 export class DashboardComponent implements OnInit {
   private api    = inject(ApiService);
   private avisos = inject(AvisosService);
+  private dialog = inject(MatDialog);
 
   d        = signal<any>(null);
   cargando = signal(true);
@@ -189,8 +192,8 @@ export class DashboardComponent implements OnInit {
     return {
       labels: dias.map((x: any) => new Date(x.dia + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })),
       datasets: [
-        { label: 'Entradas', data: dias.map((x: any) => x.entradas), backgroundColor: '#43a047', borderRadius: 3, maxBarThickness: 14 },
-        { label: 'Salidas',  data: dias.map((x: any) => x.salidas),  backgroundColor: '#e53935', borderRadius: 3, maxBarThickness: 14 },
+        { label: 'Entradas', data: dias.map((x: any) => x.entradas), backgroundColor: '#34c759', borderRadius: 4, maxBarThickness: 14 },
+        { label: 'Salidas',  data: dias.map((x: any) => x.salidas),  backgroundColor: '#ff3b30', borderRadius: 4, maxBarThickness: 14 },
       ],
     };
   });
@@ -207,7 +210,15 @@ export class DashboardComponent implements OnInit {
   tipo   = (t: string) => TIPO_MOVIMIENTO[t] ?? desconocido(t);
   estado = (e: string) => ESTADO_PEDIDO[e] ?? desconocido(e);
 
-  ngOnInit() {
+  ficha(id: number) {
+    if (!id) return;
+    this.dialog.open(ArticuloDetalleDialog, { width: '860px', maxWidth: '95vw', data: { id } })
+      .afterClosed().subscribe(() => this.cargar());
+  }
+
+  ngOnInit() { this.cargar(); }
+
+  cargar() {
     this.api.obtenerPanel().subscribe({
       next: d => { this.d.set(d); this.cargando.set(false); },
       error: e => { this.avisos.error(e, 'No se pudo cargar el panel'); this.cargando.set(false); },

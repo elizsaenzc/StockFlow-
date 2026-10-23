@@ -8,7 +8,7 @@ import {
   listarAlmacenes, crearAlmacen,
   listarProveedores, obtenerProveedor, crearProveedor, actualizarProveedor,
   listarMovimientos, registrarMovimiento,
-  listarPedidos, crearPedido, recibirPedido, cancelarPedido,
+  listarPedidos, crearPedido, recibirPedido, enviarPedido, cancelarPedido,
   obtenerAnaliticas
 } from '../controllers/index.js';
 
@@ -49,6 +49,7 @@ r.post('/movimientos', requerirRol(...ALMACEN), registrarMovimiento);
 r.get('/pedidos',                listarPedidos);
 r.post('/pedidos',               requerirRol('administrador','responsable'), crearPedido);
 r.patch('/pedidos/:id/recibir',  requerirRol(...ALMACEN), recibirPedido);
+r.patch('/pedidos/:id/enviar',   requerirRol(...GESTION), enviarPedido);
 r.patch('/pedidos/:id/cancelar', requerirRol('administrador','responsable'), cancelarPedido);
 
 export default r;

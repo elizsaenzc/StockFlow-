@@ -38,5 +38,6 @@ export class ApiService {
   listarPedidos(f?: any)                 { return this.http.get<any[]>('/api/pedidos', { params: this.params(f) }); }
   crearPedido(b: any)                    { return this.http.post<any>('/api/pedidos', b); }
   recibirPedido(id: number, b: any)      { return this.http.patch<any>(`/api/pedidos/${id}/recibir`, b); }
+  enviarPedido(id: number)               { return this.http.patch<any>(`/api/pedidos/${id}/enviar`, {}); }
   cancelarPedido(id: number)             { return this.http.patch<any>(`/api/pedidos/${id}/cancelar`, {}); }
 }

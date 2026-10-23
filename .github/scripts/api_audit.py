@@ -65,9 +65,9 @@ for role, token in tokens.items():
 admin = tokens["administrador"]
 _, panel = call("GET", "/api/panel", admin)
 k = panel["kpis"]
-check(k["totalArticulos"] == 35, f"panel: 35 artículos ({k['totalArticulos']})")
+check(k["totalArticulos"] >= 50, f"panel: catálogo completo ({k['totalArticulos']} artículos)")
 check(k["stockBajo"] + k["sinStock"] >= 4, f"panel: hay artículos en alerta ({k['stockBajo']} bajo, {k['sinStock']} sin stock)")
-check(k["valorCoste"] > 0 and k["totalProveedores"] == 6, "panel: valor de almacén y proveedores")
+check(k["valorCoste"] > 0 and k["totalProveedores"] == 8, "panel: valor de almacén y proveedores")
 check(len(panel["graficaMovimientos"]) >= 20, "panel: gráfica con actividad reciente")
 check(all("nombre" in m for m in panel["masMovidos"]), "panel: más movidos con nombre")
 check(all(m["fecha"].endswith("Z") for m in panel["movimientosRecientes"]), "fechas en ISO UTC")
@@ -126,6 +126,27 @@ recibida = next(l for l in rec["lineas"] if l["id"] == linea["id"])["cantidad_re
 check(status == 200 and recibida == linea["cantidad_pedida"], f"no se recibe más de lo pedido ({recibida}/{linea['cantidad_pedida']})")
 check(call("POST", "/api/pedidos", admin, {"proveedor_id": 1, "lineas": [{"articulo_id": 1, "cantidad": 0, "precio_unitario": 1}]})[0] == 400,
       "pedido con línea vacía rechazado")
+# Envío de borradores al proveedor
+_, borradores = call("GET", "/api/pedidos?estado=borrador", admin)
+check(len(borradores) >= 1, "hay pedidos en borrador")
+bid = borradores[0]["id"]
+check(call("PATCH", f"/api/pedidos/{bid}/enviar", operario)[0] == 403, "operario no envía pedidos")
+status, env = call("PATCH", f"/api/pedidos/{bid}/enviar", admin)
+check(status == 200 and env["estado"] == "enviado", f"admin envía el borrador ({status})")
+check(call("PATCH", f"/api/pedidos/{bid}/enviar", admin)[0] == 400, "no se reenvía un pedido ya enviado")
+
+# Ficha de artículo con historial completo y pedidos abiertos
+mas_movido = max(arts, key=lambda a: sum(1 for m in movs if m["articulo_id"] == a["id"]))
+_, ficha = call("GET", f"/api/articulos/{mas_movido['id']}", admin)
+_, suyos = call("GET", f"/api/movimientos?articulo_id={mas_movido['id']}&limite=1000", admin)
+check(len(ficha["movimientos"]) == len(suyos) > 0 and "pedidosAbiertos" in ficha,
+      f"ficha con historial completo ({len(ficha['movimientos'])} de {len(suyos)} movimientos)")
+_, refs = call("GET", "/api/articulos", admin)
+eans = [a["cod_barras"] for a in refs if a.get("cod_barras") and len(a["cod_barras"]) == 13]
+def ean_ok(c):
+    return (10 - sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(c[:12])) % 10) % 10 == int(c[12])
+check(eans and all(ean_ok(c) for c in eans), f"códigos EAN-13 válidos ({len(eans)})")
+
 status, _ = call("POST", "/api/sesion", body=None)
 check(status == 400, f"login sin cuerpo -> {status}")
 

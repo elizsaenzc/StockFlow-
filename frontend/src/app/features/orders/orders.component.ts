@@ -39,7 +39,7 @@ import { PedidoDetalleDialog, PedidoNuevoDialog, PedidoRecepcionDialog } from '.
             <mat-option value="">Todos</mat-option>
             @for (e of estados; track e[0]) { <mat-option [value]="e[0]">{{ e[1].texto }}</mat-option> }
           </mat-select></mat-form-field>
-        <span class="secundario">{{ datos.data.length }} pedidos</span>
+        <span class="secundario">{{ datos.data.length }} pedidos · {{ totalAbierto() | currency }} pendiente de recibir</span>
       </div>
 
       <mat-card class="sf-card flush">
@@ -92,6 +92,9 @@ import { PedidoDetalleDialog, PedidoNuevoDialog, PedidoRecepcionDialog } from '.
     <mat-menu #menu="matMenu">
       <ng-template matMenuContent let-p="p">
         <button mat-menu-item (click)="detalle(p)"><mat-icon>visibility</mat-icon><span>Ver detalle</span></button>
+        @if (auth.puedeEditar() && p.estado === 'borrador') {
+          <button mat-menu-item (click)="enviar(p)"><mat-icon>send</mat-icon><span>Enviar al proveedor</span></button>
+        }
         @if (auth.puedeMover() && ['enviado', 'parcial'].includes(p.estado)) {
           <button mat-menu-item (click)="recibir(p)"><mat-icon>inventory</mat-icon><span>Registrar recepción</span></button>
         }
@@ -117,6 +120,9 @@ export class OrdersComponent implements OnInit, AfterViewInit {
   columnas = ['numero_pedido', 'nombre_proveedor', 'estado', 'lineas', 'fecha_esperada', 'importe_total', 'acciones'];
 
   est = (e: string) => ESTADO_PEDIDO[e] ?? desconocido(e);
+  totalAbierto = () => this.datos.data
+    .filter(p => ['borrador', 'enviado', 'parcial'].includes(p.estado))
+    .reduce((s, p) => s + p.lineas.reduce((t: number, l: any) => t + (l.cantidad_pedida - l.cantidad_recibida) * l.precio_unitario, 0), 0);
   retrasado = (p: any) => ['enviado', 'parcial'].includes(p.estado) && p.fecha_esperada && new Date(p.fecha_esperada + 'T23:59:59') < new Date();
 
   ngOnInit() { this.cargar(); }
@@ -141,6 +147,15 @@ export class OrdersComponent implements OnInit, AfterViewInit {
   recibir(p: any) {
     this.dialog.open(PedidoRecepcionDialog, { width: '620px', maxWidth: '95vw', data: p })
       .afterClosed().subscribe(r => r && this.cargar());
+  }
+
+  enviar(p: any) {
+    this.dialog.open(ConfirmarDialog, {
+      data: { titulo: 'Enviar pedido', mensaje: `¿Enviar el pedido ${p.numero_pedido} a ${p.nombre_proveedor}? Pasará a «Enviado» y quedará pendiente de recepción.`, accion: 'Enviar' },
+    }).afterClosed().subscribe(ok => ok && this.api.enviarPedido(p.id).subscribe({
+      next: () => { this.avisos.ok(`Pedido ${p.numero_pedido} enviado a ${p.nombre_proveedor}`); this.cargar(); },
+      error: e => this.avisos.error(e),
+    }));
   }
 
   cancelar(p: any) {

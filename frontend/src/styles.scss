@@ -1,53 +1,91 @@
 @use '@angular/material' as mat;
 
-// ── Tema Angular Material ──────────────────────────────────────────────────
+// ── Tema Angular Material con la paleta de sistema de iOS ─────────────────
 @include mat.core();
 
-$sf-primary: mat.define-palette(mat.$indigo-palette, 600, 100, 800);
-$sf-accent:  mat.define-palette(mat.$teal-palette, 600, 100, 800);
-$sf-warn:    mat.define-palette(mat.$red-palette, 600);
+$ios-blue: (
+  50: #e5f1ff, 100: #bfdcff, 200: #94c5ff, 300: #66adff, 400: #3d98ff,
+  500: #007aff, 600: #0070eb, 700: #0062d1, 800: #0055b8, 900: #003f8f,
+  A100: #bfdcff, A200: #66adff, A400: #007aff, A700: #0062d1,
+  contrast: (50: rgba(0,0,0,.87), 100: rgba(0,0,0,.87), 200: rgba(0,0,0,.87), 300: rgba(0,0,0,.87), 400: white,
+             500: white, 600: white, 700: white, 800: white, 900: white,
+             A100: rgba(0,0,0,.87), A200: rgba(0,0,0,.87), A400: white, A700: white),
+);
+$ios-green: (
+  50: #e8f8ec, 100: #c6eecf, 200: #a0e3b0, 300: #79d890, 400: #5ccf78, 500: #34c759,
+  600: #2fb04f, 700: #248a3d, 800: #1d7032, 900: #135223,
+  A100: #c6eecf, A200: #79d890, A400: #34c759, A700: #248a3d,
+  contrast: (50: rgba(0,0,0,.87), 100: rgba(0,0,0,.87), 200: rgba(0,0,0,.87), 300: rgba(0,0,0,.87), 400: rgba(0,0,0,.87),
+             500: white, 600: white, 700: white, 800: white, 900: white,
+             A100: rgba(0,0,0,.87), A200: rgba(0,0,0,.87), A400: white, A700: white),
+);
+
+$sf-primary: mat.define-palette($ios-blue, 500, 100, 700);
+$sf-accent:  mat.define-palette($ios-green, 500, 100, 700);
+$sf-warn:    mat.define-palette(mat.$red-palette, A400);
+
+$sf-font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 $sf-theme: mat.define-light-theme((
   color: (primary: $sf-primary, accent: $sf-accent, warn: $sf-warn),
-  typography: mat.define-typography-config($font-family: 'Roboto, "Helvetica Neue", sans-serif'),
+  typography: mat.define-typography-config($font-family: $sf-font),
   density: 0,
 ));
-
 @include mat.all-component-themes($sf-theme);
 
-// Botones con espaciado de letras normal (el de Material M2 es muy abierto en español)
-:root {
-  --mdc-text-button-label-text-tracking: .01em;
-  --mdc-filled-button-label-text-tracking: .01em;
-  --mdc-outlined-button-label-text-tracking: .01em;
-  --mdc-protected-button-label-text-tracking: .01em;
-}
-.mat-mdc-card-subtitle, .mat-mdc-card-title { letter-spacing: normal !important; }
-
-// Tablas y formularios algo más compactos
 .mat-mdc-table, .mat-mdc-paginator { @include mat.table-density(-2); @include mat.paginator-density(-2); }
 .densa { @include mat.form-field-density(-3); @include mat.select-density(-3); }
 .sf-nav { @include mat.list-density(-2); }
 
-// ── Tokens propios ─────────────────────────────────────────────────────────
+// ── Tokens ─────────────────────────────────────────────────────────────────
 :root {
-  --sf-bg:        #f4f5f9;
+  // Colores de sistema de iOS (y variantes oscuras para texto con contraste suficiente)
+  --ios-blue: #007aff;   --ios-blue-text: #0062d1;
+  --ios-green: #34c759;  --ios-green-text: #1e7c38;
+  --ios-red: #ff3b30;    --ios-red-text: #d70015;
+  --ios-orange: #ff9500; --ios-orange-text: #b25000;
+  --ios-yellow: #ffcc00;
+  --ios-teal: #30b0c7;   --ios-teal-text: #0e7488;
+  --ios-indigo: #5856d6; --ios-purple: #af52de; --ios-gray: #8e8e93;
+
+  --sf-bg:        #f2f2f7;
   --sf-surface:   #ffffff;
-  --sf-border:    #e3e6ee;
-  --sf-text:      #1f2433;
-  --sf-text-2:    #5b6275;
-  --sf-text-3:    #8a90a2;
-  --sf-primary:   #{mat.get-color-from-palette($sf-primary, 600)};
-  --sf-primary-50:#{mat.get-color-from-palette($sf-primary, 50)};
-  --sf-ok:        #2e7d32;
-  --sf-ok-bg:     #e8f5e9;
-  --sf-warn:      #b26a00;
-  --sf-warn-bg:   #fff4e0;
-  --sf-danger:    #c62828;
-  --sf-danger-bg: #fdecea;
-  --sf-info:      #1565c0;
-  --sf-info-bg:   #e3f2fd;
-  --sf-muted-bg:  #eef0f5;
+  --sf-fill:      rgba(118, 118, 128, .12);
+  --sf-border:    rgba(60, 60, 67, .12);
+  --sf-text:      #1c1c1e;
+  --sf-text-2:    #3a3a3c;
+  --sf-text-3:    #6e6e73;
+  --sf-primary:   var(--ios-blue);
+  --sf-primary-50: rgba(0, 122, 255, .1);
+  --sf-ok: var(--ios-green-text);    --sf-ok-bg: rgba(52, 199, 89, .14);
+  --sf-warn: var(--ios-orange-text); --sf-warn-bg: rgba(255, 149, 0, .14);
+  --sf-danger: var(--ios-red-text);  --sf-danger-bg: rgba(255, 59, 48, .12);
+  --sf-info: var(--ios-teal-text);   --sf-info-bg: rgba(48, 176, 199, .14);
+  --sf-muted-bg: var(--sf-fill);
+
+  --sf-radius: 16px;
+  --sf-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .05);
+
+  // Formas redondeadas tipo iOS en los componentes de Material
+  --mdc-filled-button-container-shape: 10px;
+  --mdc-outlined-button-container-shape: 10px;
+  --mdc-text-button-container-shape: 10px;
+  --mdc-protected-button-container-shape: 10px;
+  --mdc-outlined-text-field-container-shape: 12px;
+  --mdc-dialog-container-shape: 22px;
+  --mat-menu-container-shape: 14px;
+  --mdc-snackbar-container-shape: 14px;
+  --mat-select-container-elevation-shadow: 0 10px 30px rgba(0, 0, 0, .15);
+  --mdc-linear-progress-track-height: 6px;
+  --mdc-linear-progress-active-indicator-height: 6px;
+  --mat-table-row-item-outline-color: var(--sf-border);
+  --mdc-outlined-text-field-outline-color: rgba(60, 60, 67, .2);
+
+  // Espaciado de letras normal (el de Material M2 es muy abierto)
+  --mdc-text-button-label-text-tracking: normal;
+  --mdc-filled-button-label-text-tracking: normal;
+  --mdc-outlined-button-label-text-tracking: normal;
+  --mdc-protected-button-label-text-tracking: normal;
 }
 
 html, body { height: 100%; }
@@ -55,107 +93,167 @@ body {
   margin: 0;
   background: var(--sf-bg);
   color: var(--sf-text);
-  font-family: Roboto, "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -.01em;
 }
+.mat-typography, .mat-mdc-card-title, .mat-mdc-card-subtitle, .mat-mdc-list-item, .mdc-list-item__primary-text,
+.mdc-list-item__secondary-text, .mat-mdc-cell, .mat-mdc-header-cell { letter-spacing: -.01em !important; }
 a { color: var(--sf-primary); text-decoration: none; }
 
 .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
 .mat-icon.material-symbols-outlined { overflow: visible; }
+.relleno { font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24 !important; }
 
 // ── Páginas ────────────────────────────────────────────────────────────────
-.page { padding: 24px; max-width: 1440px; margin: 0 auto; box-sizing: border-box; }
-.page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-.page-head h1 { font: 500 22px/1.3 Roboto, sans-serif; margin: 0; flex: 1; letter-spacing: -.2px; }
-.page-head .sub { color: var(--sf-text-3); font-size: 13px; }
-.stack { display: flex; flex-direction: column; gap: 16px; }
-.grid-2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+.page { padding: 28px 28px 40px; max-width: 1440px; margin: 0 auto; box-sizing: border-box; }
+.page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+.page-head h1 { font-size: 28px; font-weight: 700; line-height: 1.2; margin: 0; flex: 1; letter-spacing: -.02em; }
+.page-head .sub { color: var(--sf-text-3); font-size: 14px; }
+.stack { display: flex; flex-direction: column; gap: 18px; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; }
+.grid-2-eq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .grid-2 > *, .grid-2-eq > * { min-width: 0; }
-.grid-2-eq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
 
-.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 18px; }
 .filters .mat-mdc-form-field { width: 200px; }
 .filters .buscar { width: 300px; }
+.filters .mat-mdc-text-field-wrapper { background: var(--sf-surface); border-radius: 12px; }
 .spacer { flex: 1; }
 
-// Tarjetas
-.mat-mdc-card.sf-card { border: 1px solid var(--sf-border); box-shadow: none; border-radius: 10px; }
-.sf-card .mat-mdc-card-header { padding: 16px 16px 8px; align-items: center; }
-.sf-card .mat-mdc-card-title { font-size: 16px; font-weight: 500; }
+// ── Tarjetas tipo iOS: esquinas amplias, sin borde, sombra suave ──────────
+.mat-mdc-card.sf-card {
+  border: none; border-radius: var(--sf-radius); box-shadow: var(--sf-shadow); overflow: hidden;
+  background: var(--sf-surface);
+}
+.sf-card .mat-mdc-card-header { padding: 18px 20px 10px; align-items: center; }
+.sf-card .mat-mdc-card-title { font-size: 17px; font-weight: 600; }
+.sf-card .mat-mdc-card-subtitle { font-size: 13px; color: var(--sf-text-3); }
 .sf-card .card-actions { margin-left: auto; }
-.sf-card .mat-mdc-card-content:last-child { padding-bottom: 16px; }
+.sf-card .mat-mdc-card-content { padding: 0 20px; }
+.sf-card .mat-mdc-card-content:last-child { padding-bottom: 18px; }
 .sf-card.flush .mat-mdc-card-content { padding: 0; }
+.sf-card .mat-mdc-card-actions { padding: 8px 16px 16px; }
+
+// Iconos en cuadrado de color, como los de Ajustes de iOS
+.app-ico {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.app-ico .mat-icon { color: #fff !important; font-size: 19px; width: 19px; height: 19px; font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20; }
+.app-ico.lg { width: 42px; height: 42px; border-radius: 11px; }
+.app-ico.lg .mat-icon { font-size: 24px; width: 24px; height: 24px; }
+.bg-blue { background: var(--ios-blue); }   .bg-green { background: var(--ios-green); }
+.bg-red { background: var(--ios-red); }     .bg-orange { background: var(--ios-orange); }
+.bg-teal { background: var(--ios-teal); }   .bg-indigo { background: var(--ios-indigo); }
+.bg-purple { background: var(--ios-purple); } .bg-gray { background: var(--ios-gray); }
+.bg-yellow { background: var(--ios-yellow); }
 
 // KPIs
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-.kpi { display: flex; gap: 14px; align-items: flex-start; padding: 18px; }
-.kpi-icon {
-  width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.kpi-label { font-size: 13px; color: var(--sf-text-2); }
-.kpi-value { font-size: 26px; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+.kpi { display: flex; gap: 14px; align-items: flex-start; padding: 18px 20px; }
+.kpi-icon { width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+.kpi-icon .mat-icon { font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.kpi-icon.tone-primary { background: var(--ios-blue); color: #fff; }
+.kpi-icon.tone-ok      { background: var(--ios-green); color: #fff; }
+.kpi-icon.tone-warn    { background: var(--ios-orange); color: #fff; }
+.kpi-icon.tone-danger  { background: var(--ios-red); color: #fff; }
+.kpi-icon.tone-info    { background: var(--ios-teal); color: #fff; }
+.kpi-icon.tone-muted   { background: var(--ios-indigo); color: #fff; }
+.kpi-label { font-size: 13px; color: var(--sf-text-3); font-weight: 500; }
+.kpi-value { font-size: 28px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .kpi-sub   { font-size: 12px; color: var(--sf-text-3); margin-top: 2px; }
 
-.tone-primary { background: var(--sf-primary-50); color: var(--sf-primary); }
+// Pastillas de estado (fondo tintado)
+.tone-primary { background: var(--sf-primary-50); color: var(--ios-blue-text); }
 .tone-ok      { background: var(--sf-ok-bg);      color: var(--sf-ok); }
 .tone-warn    { background: var(--sf-warn-bg);    color: var(--sf-warn); }
 .tone-danger  { background: var(--sf-danger-bg);  color: var(--sf-danger); }
 .tone-info    { background: var(--sf-info-bg);    color: var(--sf-info); }
-.tone-muted   { background: var(--sf-muted-bg);   color: var(--sf-text-2); }
-
-// Etiquetas de estado
+.tone-muted   { background: var(--sf-fill);       color: var(--sf-text-2); }
 .estado {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 12px;
-  font-size: 12px; font-weight: 500; white-space: nowrap; line-height: 20px;
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; line-height: 18px;
 }
-.estado .mat-icon { width: 16px; height: 16px; font-size: 16px; }
+.estado .mat-icon { width: 15px; height: 15px; font-size: 15px; }
 
-// Tablas
+// Botón «tintado» de iOS (stroked de Material sin borde y con fondo suave)
+.mat-mdc-outlined-button.mat-primary, .mat-mdc-outlined-button {
+  --mdc-outlined-button-outline-color: transparent;
+  background: var(--sf-primary-50); color: var(--ios-blue-text) !important; font-weight: 600;
+}
+.mat-mdc-unelevated-button { font-weight: 600; }
+
+// Control segmentado de iOS
+.mat-button-toggle-group.mat-button-toggle-group-appearance-standard {
+  border: none; border-radius: 10px; background: var(--sf-fill); padding: 2px;
+}
+.mat-button-toggle-appearance-standard { background: transparent; border-radius: 8px; border: none !important; }
+.mat-button-toggle-group-appearance-standard .mat-button-toggle + .mat-button-toggle { border-left: none !important; }
+.mat-button-toggle-checked.mat-button-toggle-appearance-standard {
+  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 1px 1px rgba(0, 0, 0, .04); color: var(--sf-text);
+}
+.mat-button-toggle-appearance-standard .mat-button-toggle-label-content { line-height: 34px; font-weight: 500; }
+.mat-button-toggle-checked .mat-pseudo-checkbox { display: none; }
+
+// Barras de progreso redondeadas
+.mat-mdc-progress-bar { border-radius: 999px; overflow: hidden; }
+
+// ── Tablas ─────────────────────────────────────────────────────────────────
 .tabla { width: 100%; overflow-x: auto; }
 .tabla table { width: 100%; }
-.mat-mdc-header-cell { color: var(--sf-text-2); font-weight: 500; white-space: nowrap; }
-.mat-mdc-row:hover { background: #fafbfd; }
+.mat-mdc-table { background: transparent; }
+.mat-mdc-header-cell { color: var(--sf-text-3); font-weight: 500; font-size: 12px; white-space: nowrap; }
+.mat-mdc-row { transition: background .12s; }
+.mat-mdc-row:hover { background: rgba(0, 0, 0, .025); }
+.mat-mdc-cell:first-of-type, .mat-mdc-header-cell:first-of-type { padding-left: 20px; }
+.mat-mdc-cell:last-of-type, .mat-mdc-header-cell:last-of-type { padding-right: 16px; }
 .num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ref { font-variant-numeric: tabular-nums; color: var(--sf-primary); font-weight: 500; white-space: nowrap; }
+.ref { font-variant-numeric: tabular-nums; color: var(--ios-blue-text); font-weight: 600; white-space: nowrap; }
 .secundario { color: var(--sf-text-3); font-size: 12px; }
-.fuerte { font-weight: 500; }
+.fuerte { font-weight: 600; }
 .entrada { color: var(--sf-ok); }
 .salida  { color: var(--sf-danger); }
 .celda-acciones { width: 56px; text-align: right !important; }
+.clicable { cursor: pointer; }
 
-.vacio {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 40px 16px; color: var(--sf-text-3); text-align: center;
-}
-.vacio .mat-icon { width: 40px; height: 40px; font-size: 40px; color: #c5cad6; }
-
+.vacio { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 16px; color: var(--sf-text-3); text-align: center; }
+.vacio .mat-icon { width: 44px; height: 44px; font-size: 44px; color: #c7c7cc; }
 .cargando { display: flex; justify-content: center; padding: 48px; }
 
-// Datos en pares clave/valor
-.datos { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.dato { background: var(--sf-bg); border-radius: 8px; padding: 10px 12px; }
-.dato .k { font-size: 12px; color: var(--sf-text-3); }
-.dato .v { font-weight: 500; margin-top: 2px; }
+// Listas agrupadas (inset grouped) dentro de tarjetas
+.mat-mdc-list-item { border-bottom: 0.5px solid var(--sf-border); }
+.mat-mdc-list-item:last-child { border-bottom: none; }
+.sf-nav .mat-mdc-list-item { border-bottom: none; }
 
-// Diálogos
+// Datos en pares clave/valor
+.datos { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.dato { background: var(--sf-bg); border-radius: 12px; padding: 10px 14px; }
+.dato .k { font-size: 12px; color: var(--sf-text-3); }
+.dato .v { font-weight: 600; margin-top: 2px; }
+
+// ── Diálogos ───────────────────────────────────────────────────────────────
+.mat-mdc-dialog-container .mdc-dialog__title { font-weight: 700; letter-spacing: -.01em; }
 .mat-mdc-dialog-content .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; padding-top: 8px; }
 .form-grid .full { grid-column: 1 / -1; }
 .mat-mdc-dialog-content .mat-mdc-form-field { width: 100%; }
+.cdk-overlay-dark-backdrop { background: rgba(0, 0, 0, .28); backdrop-filter: blur(2px); }
+
+// Avisos
+.mat-mdc-snack-bar-container .mdc-snackbar__surface { background: rgba(28, 28, 30, .92) !important; backdrop-filter: blur(10px); }
+.aviso-error .mdc-snackbar__surface { background: rgba(215, 0, 21, .95) !important; }
+.aviso-error .mat-mdc-snack-bar-label, .aviso-error .mat-mdc-button { color: #fff !important; }
 
 @media (max-width: 960px) {
   .grid-2, .grid-2-eq { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 600px) {
-  .page { padding: 16px; }
+  .page { padding: 18px 16px 32px; }
+  .page-head h1 { font-size: 24px; }
   .filters .mat-mdc-form-field, .filters .buscar { width: 100%; }
-  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .kpi { padding: 12px; gap: 10px; flex-direction: column; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .kpi { padding: 14px; gap: 10px; flex-direction: column; }
   .kpi-value { font-size: 22px; }
   .mat-mdc-dialog-content .form-grid { grid-template-columns: 1fr; }
 }
-
-// Avisos de error en rojo
-.aviso-error .mdc-snackbar__surface { background: #b71c1c !important; }
-.aviso-error .mat-mdc-snack-bar-label, .aviso-error .mat-mdc-button { color: #fff !important; }

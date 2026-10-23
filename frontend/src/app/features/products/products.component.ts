@@ -22,6 +22,8 @@ import { ConfirmarDialog } from '../../shared/confirmar.dialog';
 import { estadoStock } from '../../shared/estados';
 import { ArticuloDialog } from './articulo.dialog';
 import { MovimientoDialog } from './movimiento.dialog';
+import { ArticuloDetalleDialog } from './articulo-detalle.dialog';
+import { exportarCsv } from '../../shared/exportar';
 
 @Component({
   selector: 'sf-products',
@@ -33,6 +35,7 @@ import { MovimientoDialog } from './movimiento.dialog';
     <div class="page">
       <div class="page-head">
         <h1>Artículos</h1>
+        <button mat-stroked-button (click)="exportar()"><mat-icon>download</mat-icon> Exportar</button>
         @if (auth.puedeEditar()) {
           <button mat-flat-button color="primary" (click)="editar()"><mat-icon>add</mat-icon> Nuevo artículo</button>
         }
@@ -100,14 +103,14 @@ import { MovimientoDialog } from './movimiento.dialog';
               <th mat-header-cell *matHeaderCellDef class="celda-acciones"></th>
               <td mat-cell *matCellDef="let a" class="celda-acciones">
                 @if (auth.puedeMover()) {
-                  <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{ a: a }" [attr.aria-label]="'Acciones de ' + a.nombre">
+                  <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{ a: a }" (click)="$event.stopPropagation()" [attr.aria-label]="'Acciones de ' + a.nombre">
                     <mat-icon>more_vert</mat-icon>
                   </button>
                 }
               </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="columnas; sticky: true"></tr>
-            <tr mat-row *matRowDef="let row; columns: columnas"></tr>
+            <tr mat-row *matRowDef="let row; columns: columnas" class="clicable" (click)="ficha(row)"></tr>
             <tr class="mat-row" *matNoDataRow>
               <td class="mat-cell" [attr.colspan]="columnas.length"><div class="vacio"><mat-icon>search_off</mat-icon>No hay artículos con esos filtros</div></td>
             </tr>
@@ -119,6 +122,7 @@ import { MovimientoDialog } from './movimiento.dialog';
 
     <mat-menu #menu="matMenu">
       <ng-template matMenuContent let-a="a">
+        <button mat-menu-item (click)="ficha(a)"><mat-icon>info</mat-icon><span>Ver ficha</span></button>
         <button mat-menu-item (click)="mover(a)"><mat-icon>swap_horiz</mat-icon><span>Registrar movimiento</span></button>
         @if (auth.puedeEditar()) {
           <button mat-menu-item (click)="editar(a)"><mat-icon>edit</mat-icon><span>Editar</span></button>
@@ -190,6 +194,33 @@ export class ProductsComponent implements OnInit, AfterViewInit {
   mover(articulo: any) {
     this.dialog.open(MovimientoDialog, { maxWidth: '95vw', data: { articulo } })
       .afterClosed().subscribe(r => r && this.cargar());
+  }
+
+  ficha(a: any) {
+    this.dialog.open(ArticuloDetalleDialog, { width: '860px', maxWidth: '95vw', data: { id: a.id } })
+      .afterClosed().subscribe(() => this.cargar());
+  }
+
+  /** Exporta lo que se ve: respeta filtros y orden actuales */
+  exportar() {
+    const filas = this.datos.sortData(this.datos.filteredData.slice(), this.sort);
+    exportarCsv('articulos', [
+      { titulo: 'Referencia', valor: a => a.referencia },
+      { titulo: 'EAN', valor: a => a.cod_barras },
+      { titulo: 'Artículo', valor: a => a.nombre },
+      { titulo: 'Familia', valor: a => a.nombre_familia },
+      { titulo: 'Proveedor', valor: a => a.nombre_proveedor },
+      { titulo: 'Almacén', valor: a => a.nombre_almacen },
+      { titulo: 'Ubicación', valor: a => a.ubicacion },
+      { titulo: 'Stock', valor: a => a.stock },
+      { titulo: 'Unidad', valor: a => a.unidad },
+      { titulo: 'Stock mínimo', valor: a => a.stock_minimo },
+      { titulo: 'Estado', valor: a => estadoStock(a).texto },
+      { titulo: 'Coste (€)', valor: a => a.precio_coste },
+      { titulo: 'PVP (€)', valor: a => a.precio_venta },
+      { titulo: 'Valor stock (€)', valor: a => Math.round(a.stock * a.precio_coste * 100) / 100 },
+    ], filas);
+    this.avisos.ok(`${filas.length} artículos exportados`);
   }
 
   baja(a: any) {

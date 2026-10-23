@@ -13,6 +13,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { aIso } from '../../shared/fechas';
+import { exportarCsv } from '../../shared/exportar';
 import { ApiService } from '../../core/services/api.service';
 import { AvisosService } from '../../shared/avisos.service';
 import { TIPO_MOVIMIENTO, desconocido } from '../../shared/estados';
@@ -24,7 +25,10 @@ import { TIPO_MOVIMIENTO, desconocido } from '../../shared/estados';
             MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, MatCardModule, MatProgressBarModule, MatDatepickerModule],
   template: `
     <div class="page">
-      <div class="page-head"><h1>Movimientos</h1><span class="sub">Historial de entradas, salidas y ajustes</span></div>
+      <div class="page-head">
+        <h1>Movimientos</h1>
+        <button mat-stroked-button (click)="exportar()"><mat-icon>download</mat-icon> Exportar</button>
+      </div>
 
       <div class="kpis resumen">
         @for (r of resumen(); track r.tipo) {
@@ -132,6 +136,25 @@ export class MovementsComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit() { this.datos.sort = this.sort; this.datos.paginator = this.paginator; }
+
+  exportar() {
+    const filas = this.datos.sortData(this.datos.filteredData.slice(), this.sort);
+    exportarCsv('movimientos', [
+      { titulo: 'Fecha', valor: m => new Date(m.fecha).toLocaleString('es-ES') },
+      { titulo: 'Tipo', valor: m => this.tipo(m.tipo).texto },
+      { titulo: 'Referencia', valor: m => m.referencia },
+      { titulo: 'Artículo', valor: m => m.nombre_articulo },
+      { titulo: 'Cantidad', valor: m => m.cantidad },
+      { titulo: 'Unidad', valor: m => m.unidad },
+      { titulo: 'Stock anterior', valor: m => m.stock_antes },
+      { titulo: 'Stock posterior', valor: m => m.stock_despues },
+      { titulo: 'Motivo', valor: m => m.motivo },
+      { titulo: 'Documento', valor: m => m.documento },
+      { titulo: 'Almacén', valor: m => m.nombre_almacen },
+      { titulo: 'Usuario', valor: m => m.nombre_usuario },
+    ], filas);
+    this.avisos.ok(`${filas.length} movimientos exportados`);
+  }
 
   cargar() {
     this.cargando.set(true);

@@ -37,14 +37,14 @@ export function obtenerPanel(req, res) {
   };
 
   const movimientosRecientes = all(`
-    SELECT m.id, m.tipo, m.cantidad, m.stock_antes, m.stock_despues, m.motivo, m.fecha,
+    SELECT m.id, m.articulo_id, m.tipo, m.cantidad, m.stock_antes, m.stock_despues, m.motivo, m.fecha,
            a.nombre AS nombre_articulo, a.referencia, a.unidad,
            al.nombre AS nombre_almacen, u.nombre_completo AS nombre_usuario
     FROM movimientos m
     JOIN articulos a ON a.id = m.articulo_id
     LEFT JOIN almacenes al ON al.id = m.almacen_id
     LEFT JOIN usuarios u ON u.id = m.usuario_id
-    ORDER BY m.fecha DESC LIMIT 15`);
+    ORDER BY m.fecha DESC, m.id DESC LIMIT 15`);
 
   const articulosCriticos = all(`
     SELECT a.*, f.nombre AS nombre_familia, f.color AS color_familia,
@@ -131,11 +131,15 @@ export function obtenerArticulo(req, res) {
   const a = first(SQL_ART + ' WHERE a.id=?', [Number(req.params.id)]);
   if (!a) return res.status(404).json({ mensaje: 'Artículo no encontrado' });
   const movimientos = all(`
-    SELECT m.*, al.nombre AS nombre_almacen, u.nombre_completo AS nombre_usuario
+    SELECT m.*, m.referencia AS documento, al.nombre AS nombre_almacen, u.nombre_completo AS nombre_usuario
     FROM movimientos m LEFT JOIN almacenes al ON al.id=m.almacen_id
     LEFT JOIN usuarios u ON u.id=m.usuario_id
-    WHERE m.articulo_id=? ORDER BY m.fecha DESC LIMIT 12`, [a.id]);
-  res.json({ ...a, movimientos: filas(movimientos) });
+    WHERE m.articulo_id=? ORDER BY m.fecha DESC, m.id DESC LIMIT 200`, [a.id]);
+  const pedidosAbiertos = all(`
+    SELECT pc.id, pc.numero_pedido, pc.estado, pc.fecha_esperada, lp.cantidad_pedida, lp.cantidad_recibida
+    FROM lineas_pedido lp JOIN pedidos_compra pc ON pc.id=lp.pedido_id
+    WHERE lp.articulo_id=? AND pc.estado IN ('borrador','enviado','parcial')`, [a.id]);
+  res.json({ ...a, movimientos: filas(movimientos), pedidosAbiertos });
 }
 
 export function crearArticulo(req, res) {
@@ -403,6 +407,18 @@ export function recibirPedido(req, res) {
     [pendientes===0 ? 'recibido' : 'parcial', oid]);
   guardarBD();
 
+  const actualizado = first(SQL_PC + ' WHERE pc.id=?', [oid]);
+  res.json({ ...conFechas(actualizado), lineas: all('SELECT lp.*,a.nombre AS nombre_articulo,a.referencia,a.unidad FROM lineas_pedido lp JOIN articulos a ON a.id=lp.articulo_id WHERE lp.pedido_id=?',[oid]) });
+}
+
+export function enviarPedido(req, res) {
+  const oid = Number(req.params.id);
+  const pc = first('SELECT estado FROM pedidos_compra WHERE id=?', [oid]);
+  if (!pc) return res.status(404).json({ mensaje: 'Pedido no encontrado' });
+  if (pc.estado !== 'borrador')
+    return res.status(400).json({ mensaje: 'Solo se pueden enviar pedidos en borrador' });
+  run("UPDATE pedidos_compra SET estado='enviado',fecha_mod=datetime('now') WHERE id=?", [oid]);
+  guardarBD();
   const actualizado = first(SQL_PC + ' WHERE pc.id=?', [oid]);
   res.json({ ...conFechas(actualizado), lineas: all('SELECT lp.*,a.nombre AS nombre_articulo,a.referencia,a.unidad FROM lineas_pedido lp JOIN articulos a ON a.id=lp.articulo_id WHERE lp.pedido_id=?',[oid]) });
 }
