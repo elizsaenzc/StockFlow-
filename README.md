@@ -9,6 +9,9 @@ Full-stack inventory management SPA developed with Angular 17 (standalone compon
 [![CI](https://github.com/elizsaenzc/StockFlow-/actions/workflows/ci.yml/badge.svg)](https://github.com/elizsaenzc/StockFlow-/actions/workflows/ci.yml)
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/elizsaenzc/StockFlow-)
 
+**Demo completa en vivo (Angular + API Node.js):** https://stockflow-7zec.onrender.com — usuario `admin` / `admin123`  
+_Plan gratuito: la primera carga tras un rato sin uso puede tardar ~1 minuto._
+
 ## Despliegue completo (Angular + API Node.js + SQLite)
 
 Un único contenedor: la API Express sirve el frontend Angular compilado y la API REST en `/api`.
