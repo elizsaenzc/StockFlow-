@@ -6,6 +6,30 @@ Full-stack inventory management SPA developed with Angular 17 (standalone compon
 
 **Stack:** Angular 17.3.0 (standalone + signals) + Node.js 25.9.0 / Express + SQLite (sql.js)
 
+[![CI](https://github.com/elizsaenzc/StockFlow-/actions/workflows/ci.yml/badge.svg)](https://github.com/elizsaenzc/StockFlow-/actions/workflows/ci.yml)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/elizsaenzc/StockFlow-)
+
+## Despliegue completo (Angular + API Node.js + SQLite)
+
+Un único contenedor: la API Express sirve el frontend Angular compilado y la API REST en `/api`.
+
+```bash
+docker build -t stockflow .
+docker run -p 8080:8080 -e JWT_SECRET="una-clave-larga" stockflow
+# http://localhost:8080  → usuario admin / admin123
+```
+
+En Render: **New → Blueprint** sobre este repositorio (usa `render.yaml`; `JWT_SECRET` se genera automáticamente). La base de datos se crea y se rellena con datos de ejemplo al arrancar.
+
+| Variable | Uso | Por defecto |
+|---|---|---|
+| `JWT_SECRET` | Clave de firma de los tokens | valor de desarrollo |
+| `STOCKFLOW_DB_PATH` | Fichero de la base SQLite | `/app/data/stockflow.db.bin` en Docker |
+| `CORS_ORIGINS` | Orígenes permitidos si el frontend se aloja aparte | `localhost:4200,4201` |
+| `PORT` | Puerto HTTP | `8080` en Docker, `3000` en local |
+
+El pipeline de CI compila el frontend, construye la imagen y la prueba de extremo a extremo (salud, SPA y login).
+
 Proyecto portfolio para **Distribuciones Iberia** — control de stock, movimientos,
 proveedores y pedidos de compra para almacenes de suministros industriales en España.
 

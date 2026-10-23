@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/dist
+**/.angular
+**/*.db.bin
+backend/public
+index.html
+assets

@@ -3,7 +3,6 @@
     "baseUrl": "./",
     "rootDir": "./src",
     "outDir": "./dist/out-tsc",
-    "ignoreDeprecations": "6.0",
     "strict": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,

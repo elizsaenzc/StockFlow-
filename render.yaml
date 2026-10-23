@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: stockflow
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/salud
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true

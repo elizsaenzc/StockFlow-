@@ -1,10 +1,12 @@
 import initSqlJs from 'sql.js';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join }  from 'path';
 
 const __dir   = dirname(fileURLToPath(import.meta.url));
-const RUTA_BD = join(__dir, '../../stockflow.db.bin');
+// Ruta configurable para contenedores (STOCKFLOW_DB_PATH)
+const RUTA_BD = process.env.STOCKFLOW_DB_PATH || join(__dir, '../../stockflow.db.bin');
+mkdirSync(dirname(RUTA_BD), { recursive: true });
 
 let _bd = null;
 
