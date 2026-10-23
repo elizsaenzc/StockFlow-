@@ -1,134 +1,156 @@
-import { Component, OnInit, signal } from '@angular/core';
-import { CommonModule }              from '@angular/common';
-import { ApiService }                from '../../core/services/api.service';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTableModule } from '@angular/material/table';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { BaseChartDirective } from 'ng2-charts';
+import { ChartConfiguration } from 'chart.js';
+import { ApiService } from '../../core/services/api.service';
+import { AvisosService } from '../../shared/avisos.service';
 
 @Component({
-  selector: 'sf-analytics', standalone: true, imports: [CommonModule],
+  selector: 'sf-analytics',
+  standalone: true,
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, MatCardModule, MatIconModule, MatTableModule, MatProgressBarModule,
+            MatProgressSpinnerModule, BaseChartDirective],
   template: `
-    <div class="topbar">
-      <span class="topbar-title">Analíticas e informes</span>
-      <span class="text-sm text-muted">Datos de los últimos 90 días</span>
-    </div>
-    <div class="page section-gap">
-      @if (cargando()) { <div class="spinner-wrap"><div class="spinner"></div></div> }
-      @else if (datos()) {
+    <div class="page">
+      <div class="page-head"><h1>Analíticas</h1><span class="sub">Últimos 90 días</span></div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <div class="card">
-            <div class="card-header"><span class="card-title">Valor de stock por familia</span></div>
-            <div class="card-body section-gap" style="gap:10px">
-              @for (f of datos()!.valorPorFamilia; track f.nombre) {
-                <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0" [style.background]="f.color"></div>
-                  <div style="flex:1;min-width:0">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                      <span style="font-size:12px;font-weight:500">{{ f.nombre }}</span>
-                      <span class="mono" style="font-size:11px">{{ f.valor_coste | currency:'EUR':'symbol':'1.0-0':'es' }}</span>
-                    </div>
-                    <div style="height:4px;background:var(--panel2);border-radius:99px;overflow:hidden">
-                      <div [style.width]="pctFamilia(f.valor_coste) + '%'"
-                           [style.background]="f.color"
-                           style="height:100%;border-radius:99px;transition:width .4s">
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              }
-            </div>
+      @if (cargando()) {
+        <div class="cargando"><mat-spinner diameter="40" /></div>
+      }
+      @if (d(); as d) {
+        <div class="stack">
+          <div class="grid-2-eq">
+            <mat-card class="sf-card">
+              <mat-card-header><mat-card-title>Valor de stock por familia</mat-card-title>
+                <span class="card-actions secundario">{{ totalValor() | currency:'EUR':'symbol':'1.0-0' }} a coste</span></mat-card-header>
+              <mat-card-content><div class="grafica"><canvas baseChart type="doughnut" [data]="familias()" [options]="opcionesDonut"></canvas></div></mat-card-content>
+            </mat-card>
+            <mat-card class="sf-card">
+              <mat-card-header><mat-card-title>Unidades movidas por día</mat-card-title></mat-card-header>
+              <mat-card-content><div class="grafica"><canvas baseChart type="line" [data]="actividad()" [options]="opcionesLinea"></canvas></div></mat-card-content>
+            </mat-card>
           </div>
 
-          <div class="card">
-            <div class="card-header"><span class="card-title">Rendimiento de proveedores</span></div>
-            <div class="tbl-wrap">
-              <table class="sf-tbl">
-                <thead><tr><th>Proveedor</th><th>Puntuación</th><th>Plazo</th><th>Pedidos</th><th class="text-right">Gasto</th></tr></thead>
-                <tbody>
-                  @for (p of datos()!.rendimientoProveedores; track p.id) {
-                    <tr>
-                      <td style="font-weight:500;font-size:12px">{{ p.nombre }}</td>
-                      <td><span style="font-weight:700" [style.color]="colorPunt(p.puntuacion)">{{ p.puntuacion | number:'1.1-1' }}</span></td>
-                      <td class="text-sm text-muted">{{ p.plazo_entrega }}d</td>
-                      <td class="text-sm">{{ p.completados }}/{{ p.total_pedidos }}</td>
-                      <td class="mono text-right">{{ p.gasto_total | currency:'EUR':'symbol':'1.0-0':'es' }}</td>
-                    </tr>
-                  }
-                </tbody>
+          <mat-card class="sf-card flush">
+            <mat-card-header><mat-card-title>Rotación de artículos</mat-card-title></mat-card-header>
+            <mat-card-content class="tabla">
+              <table mat-table [dataSource]="d.rotacion">
+                <ng-container matColumnDef="pos"><th mat-header-cell *matHeaderCellDef>#</th><td mat-cell *matCellDef="let a; let i = index" class="secundario">{{ i + 1 }}</td></ng-container>
+                <ng-container matColumnDef="articulo"><th mat-header-cell *matHeaderCellDef>Artículo</th>
+                  <td mat-cell *matCellDef="let a"><div class="fuerte">{{ a.nombre }}</div><div class="secundario">{{ a.referencia }}</div></td></ng-container>
+                <ng-container matColumnDef="stock"><th mat-header-cell *matHeaderCellDef class="num">Stock</th><td mat-cell *matCellDef="let a" class="num">{{ a.stock | number }} {{ a.unidad }}</td></ng-container>
+                <ng-container matColumnDef="salidas"><th mat-header-cell *matHeaderCellDef class="num">Salidas</th><td mat-cell *matCellDef="let a" class="num salida">{{ a.salidas_90d | number }}</td></ng-container>
+                <ng-container matColumnDef="entradas"><th mat-header-cell *matHeaderCellDef class="num">Entradas</th><td mat-cell *matCellDef="let a" class="num entrada">{{ a.entradas_90d | number }}</td></ng-container>
+                <ng-container matColumnDef="actividad"><th mat-header-cell *matHeaderCellDef>Movimientos</th>
+                  <td mat-cell *matCellDef="let a" class="barra-celda"><mat-progress-bar mode="determinate" [value]="pct(a.num_movimientos)" /><span class="secundario">{{ a.num_movimientos }}</span></td></ng-container>
+                <tr mat-header-row *matHeaderRowDef="colsRotacion"></tr>
+                <tr mat-row *matRowDef="let r; columns: colsRotacion"></tr>
               </table>
-            </div>
-          </div>
-        </div>
+            </mat-card-content>
+          </mat-card>
 
-        <div class="card">
-          <div class="card-header"><span class="card-title">Rotación de artículos (últimos 90 días)</span></div>
-          <div class="tbl-wrap">
-            <table class="sf-tbl">
-              <thead><tr><th>#</th><th>Referencia</th><th>Artículo</th><th>Stock actual</th><th>Salidas 90d</th><th>Entradas 90d</th><th>Movimientos</th><th>Rotación</th></tr></thead>
-              <tbody>
-                @for (a of datos()!.rotacion; track a.id) {
-                  <tr>
-                    <td style="font-size:10px;font-weight:800;color:var(--chalk3);text-align:center">{{ $index + 1 }}</td>
-                    <td class="mono" style="color:var(--cobalt)">{{ a.referencia }}</td>
-                    <td style="font-weight:500">{{ a.nombre }}</td>
-                    <td class="mono">{{ a.stock }}</td>
-                    <td class="mono" style="color:var(--coral)">{{ a.salidas_90d }}</td>
-                    <td class="mono" style="color:var(--jade)">{{ a.entradas_90d }}</td>
-                    <td class="mono">{{ a.num_movimientos }}</td>
-                    <td>
-                      <div style="height:5px;background:var(--panel2);border-radius:99px;width:80px;overflow:hidden">
-                        <div [style.width]="pctRotacion(a.num_movimientos) + '%'"
-                             style="height:100%;background:var(--cobalt);border-radius:99px">
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
+          <div class="grid-2-eq">
+            <mat-card class="sf-card flush">
+              <mat-card-header><mat-card-title>Rendimiento de proveedores</mat-card-title></mat-card-header>
+              <mat-card-content class="tabla">
+                <table mat-table [dataSource]="d.rendimientoProveedores">
+                  <ng-container matColumnDef="nombre"><th mat-header-cell *matHeaderCellDef>Proveedor</th><td mat-cell *matCellDef="let p" class="fuerte">{{ p.nombre }}</td></ng-container>
+                  <ng-container matColumnDef="puntuacion"><th mat-header-cell *matHeaderCellDef class="num">Puntuación</th><td mat-cell *matCellDef="let p" class="num">{{ p.puntuacion | number:'1.1-1' }}</td></ng-container>
+                  <ng-container matColumnDef="pedidos"><th mat-header-cell *matHeaderCellDef class="num">Recibidos</th><td mat-cell *matCellDef="let p" class="num">{{ p.completados }} / {{ p.total_pedidos }}</td></ng-container>
+                  <ng-container matColumnDef="gasto"><th mat-header-cell *matHeaderCellDef class="num">Gasto</th><td mat-cell *matCellDef="let p" class="num">{{ p.gasto_total | currency:'EUR':'symbol':'1.0-0' }}</td></ng-container>
+                  <tr mat-header-row *matHeaderRowDef="colsProv"></tr>
+                  <tr mat-row *matRowDef="let r; columns: colsProv"></tr>
+                </table>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card class="sf-card flush">
+              <mat-card-header><mat-card-title>Stock inmovilizado</mat-card-title><span class="card-actions secundario">sin movimiento en 60 días</span></mat-card-header>
+              <mat-card-content class="tabla">
+                @if (!d.stockInmovilizado.length) {
+                  <div class="vacio"><mat-icon>task_alt</mat-icon>Todo el stock ha tenido movimiento en los últimos 60 días</div>
+                } @else {
+                  <table mat-table [dataSource]="d.stockInmovilizado">
+                    <ng-container matColumnDef="articulo"><th mat-header-cell *matHeaderCellDef>Artículo</th><td mat-cell *matCellDef="let a" class="fuerte">{{ a.nombre }}</td></ng-container>
+                    <ng-container matColumnDef="valor"><th mat-header-cell *matHeaderCellDef class="num">Valor</th><td mat-cell *matCellDef="let a" class="num">{{ a.valor_inmovilizado | currency }}</td></ng-container>
+                    <ng-container matColumnDef="ultimo"><th mat-header-cell *matHeaderCellDef>Último movimiento</th><td mat-cell *matCellDef="let a" class="secundario">{{ a.ultimo_movimiento ? (a.ultimo_movimiento | date:'d MMM y') : 'Nunca' }}</td></ng-container>
+                    <tr mat-header-row *matHeaderRowDef="['articulo','valor','ultimo']"></tr>
+                    <tr mat-row *matRowDef="let r; columns: ['articulo','valor','ultimo']"></tr>
+                  </table>
                 }
-              </tbody>
-            </table>
+              </mat-card-content>
+            </mat-card>
           </div>
         </div>
-
-        @if (datos()!.stockInmovilizado.length) {
-          <div class="card" style="border-color:rgba(245,166,35,.2)">
-            <div class="card-header"><span class="card-title" style="color:var(--amber)">Stock inmovilizado (más de 60 días sin movimiento)</span></div>
-            <div class="tbl-wrap">
-              <table class="sf-tbl">
-                <thead><tr><th>Referencia</th><th>Artículo</th><th>Stock</th><th class="text-right">Valor inmovilizado</th><th>Último movimiento</th></tr></thead>
-                <tbody>
-                  @for (a of datos()!.stockInmovilizado; track a.id) {
-                    <tr>
-                      <td class="mono" style="color:var(--cobalt)">{{ a.referencia }}</td>
-                      <td style="font-weight:500">{{ a.nombre }}</td>
-                      <td class="mono">{{ a.stock }}</td>
-                      <td class="mono text-right fw-600" style="color:var(--amber)">{{ a.valor_inmovilizado | currency:'EUR':'symbol':'1.2-2':'es' }}</td>
-                      <td class="text-sm text-muted">{{ a.ultimo_movimiento ? (a.ultimo_movimiento | date:'dd/MM/yy') : 'Sin movimientos' }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </div>
-        }
       }
     </div>
-  `
+  `,
+  styles: [`
+    .grafica { height: 280px; position: relative; }
+    .barra-celda { display: flex; align-items: center; gap: 10px; min-width: 160px; height: 52px; }
+    .barra-celda mat-progress-bar { width: 120px; }
+  `],
 })
 export class AnalyticsComponent implements OnInit {
-  datos   = signal<any>(null);
-  cargando = signal(true);
+  private api = inject(ApiService);
+  private avisos = inject(AvisosService);
 
-  constructor(private api: ApiService) {}
+  d = signal<any>(null);
+  cargando = signal(true);
+  colsRotacion = ['pos', 'articulo', 'stock', 'salidas', 'entradas', 'actividad'];
+  colsProv = ['nombre', 'puntuacion', 'pedidos', 'gasto'];
+
+  totalValor = computed(() => (this.d()?.valorPorFamilia ?? []).reduce((s: number, f: any) => s + f.valor_coste, 0));
+
+  familias = computed<ChartConfiguration<'doughnut'>['data']>(() => {
+    const f = this.d()?.valorPorFamilia ?? [];
+    return {
+      labels: f.map((x: any) => x.nombre),
+      datasets: [{ data: f.map((x: any) => Math.round(x.valor_coste)), backgroundColor: f.map((x: any) => x.color), borderWidth: 2, borderColor: '#fff' }],
+    };
+  });
+
+  actividad = computed<ChartConfiguration<'line'>['data']>(() => {
+    const dias = this.d()?.graficaDiaria ?? [];
+    const etiqueta = (x: any) => new Date(x.dia + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    return {
+      labels: dias.map(etiqueta),
+      datasets: [
+        { label: 'Entradas', data: dias.map((x: any) => x.entradas), borderColor: '#43a047', backgroundColor: 'rgba(67,160,71,.12)', fill: true, tension: .3, pointRadius: 0 },
+        { label: 'Salidas',  data: dias.map((x: any) => x.salidas),  borderColor: '#e53935', backgroundColor: 'rgba(229,57,53,.08)', fill: true, tension: .3, pointRadius: 0 },
+      ],
+    };
+  });
+
+  opcionesDonut: ChartConfiguration<'doughnut'>['options'] = {
+    responsive: true, maintainAspectRatio: false, cutout: '62%',
+    plugins: {
+      legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8 } },
+      tooltip: { callbacks: { label: c => ` ${c.label}: ${Number(c.raw).toLocaleString('es-ES')} €` } },
+    },
+  };
+
+  opcionesLinea: ChartConfiguration<'line'>['options'] = {
+    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } },
+      y: { beginAtZero: true, grid: { color: '#eef0f5' }, ticks: { precision: 0 } },
+    },
+  };
+
   ngOnInit() {
     this.api.obtenerAnaliticas().subscribe({
-      next: d => { this.datos.set(d); this.cargando.set(false); },
-      error: () => this.cargando.set(false)
+      next: d => { this.d.set(d); this.cargando.set(false); },
+      error: e => { this.avisos.error(e, 'No se pudieron cargar las analíticas'); this.cargando.set(false); },
     });
   }
 
-  maxFamilia() { return Math.max(1, ...(this.datos()?.valorPorFamilia ?? []).map((f: any) => f.valor_coste)); }
-  pctFamilia(v: number) { return Math.max(4, Math.round((v / this.maxFamilia()) * 100)); }
-
-  maxMov() { return Math.max(1, ...(this.datos()?.rotacion ?? []).map((r: any) => r.num_movimientos)); }
-  pctRotacion(n: number) { return Math.max(4, Math.round((n / this.maxMov()) * 100)); }
-
-  colorPunt(p: number) { return p >= 8 ? 'var(--jade)' : p >= 6 ? 'var(--amber)' : 'var(--coral)'; }
+  private maxMov = computed(() => Math.max(1, ...(this.d()?.rotacion ?? []).map((r: any) => r.num_movimientos)));
+  pct(n: number) { return (n / this.maxMov()) * 100; }
 }

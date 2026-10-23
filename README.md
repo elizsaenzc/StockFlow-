@@ -1,16 +1,35 @@
 # StockFlow-
-Full-stack inventory management SPA developed with Angular 17 (standalone components, signals, reactive forms) and a Node.js REST API with SQLite. Includes RBAC (Admin / Manager / Viewer), product catalog, movement history, low-stock alerts, and exportable reports. Static demo available via GitHub Pages: https://elizsaenzc.github.io/StockFlow-/
+Full-stack inventory management app built with Angular 17 (standalone components, signals, reactive forms, Angular Material) and a Node.js REST API with SQLite. Role-based access (administrator, purchasing manager, warehouse operator, read-only consultant), product catalog, stock movements, low-stock alerts, purchase orders and analytics. Live demo: https://stockflow-7zec.onrender.com
 
 
 # StockFlow App— Sistema de Gestión de Almacén - Proyecto Angular Master Desarrollo Fullstack & Arquitectura Cloud - ELizabeth Sáenz 
 
-**Stack:** Angular 17.3.0 (standalone + signals) + Node.js 25.9.0 / Express + SQLite (sql.js)
+**Stack:** Angular 17.3 (standalone + signals) · Angular Material + CDK · Chart.js (ng2-charts) · Node.js / Express · SQLite (sql.js) · JWT
 
 [![CI](https://github.com/elizsaenzc/StockFlow-/actions/workflows/ci.yml/badge.svg)](https://github.com/elizsaenzc/StockFlow-/actions/workflows/ci.yml)
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/elizsaenzc/StockFlow-)
 
 **Demo completa en vivo (Angular + API Node.js):** https://stockflow-7zec.onrender.com — usuario `admin` / `admin123`  
 _Plan gratuito: la primera carga tras un rato sin uso puede tardar ~1 minuto._
+
+## Interfaz
+
+- **Angular Material**: `mat-sidenav` adaptable (menú lateral fijo en escritorio, desplegable en móvil), `mat-toolbar`, `mat-table` con ordenación y paginación, formularios reactivos con validación, diálogos (`MatDialog`), avisos (`MatSnackBar`), selector de fechas en español e iconos **Material Symbols** servidos desde el propio paquete (sin dependencias externas).
+- **Gráficas** con Chart.js: entradas y salidas de los últimos 30 días, valor de stock por familia y actividad diaria a 90 días.
+- Formato español de fechas, números e importes (`registerLocaleData` + `LOCALE_ID`).
+
+## Roles y permisos
+
+Se aplican en la API (`requerirRol`) y la interfaz oculta lo que cada rol no puede hacer:
+
+| Acción | Administrador | Responsable de compras | Operario | Consultor |
+|---|:-:|:-:|:-:|:-:|
+| Consultar catálogo, movimientos, pedidos y analíticas | ✓ | ✓ | ✓ | ✓ |
+| Registrar entradas, salidas, ajustes y recepciones | ✓ | ✓ | ✓ | |
+| Crear y editar artículos, proveedores y pedidos | ✓ | ✓ | | |
+| Dar de baja artículos y cancelar pedidos | ✓ | ✓ | | |
+
+Además: un ajuste de inventario fija el recuento físico, no se puede recibir más de lo pedido, no se puede sacar más stock del disponible y las referencias de artículo son únicas. El historial de movimientos cuadra siempre con el stock (lo comprueba el CI).
 
 ## Despliegue completo (Angular + API Node.js + SQLite)
 
@@ -31,7 +50,7 @@ En Render: **New → Blueprint** sobre este repositorio (usa `render.yaml`; `JWT
 | `CORS_ORIGINS` | Orígenes permitidos si el frontend se aloja aparte | `localhost:4200,4201` |
 | `PORT` | Puerto HTTP | `8080` en Docker, `3000` en local |
 
-El pipeline de CI compila el frontend, construye la imagen y la prueba de extremo a extremo (salud, SPA y login).
+El pipeline de CI compila el frontend, construye la imagen, la arranca y ejecuta una auditoría de la API con los cuatro roles (`.github/scripts/api_audit.py`): permisos, validaciones y coherencia entre movimientos y stock.
 
 Proyecto portfolio para **Distribuciones Iberia** — control de stock, movimientos,
 proveedores y pedidos de compra para almacenes de suministros industriales en España.

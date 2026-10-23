@@ -1,21 +1,34 @@
-import { Injectable, signal }      from '@angular/core';
-import { HttpClient }              from '@angular/common/http';
-import { Router }                  from '@angular/router';
-import { tap }                     from 'rxjs';
+import { Injectable, computed, signal } from '@angular/core';
+import { HttpClient }                   from '@angular/common/http';
+import { Router }                       from '@angular/router';
+import { tap }                          from 'rxjs';
+
+export type Rol = 'administrador' | 'responsable' | 'operario' | 'consultor';
 
 export interface Usuario {
   id: number;
   nombre_usuario: string;
-  rol: 'administrador' | 'responsable' | 'operario' | 'consultor';
+  rol: Rol;
   nombre: string;
 }
 
+export const ETIQUETA_ROL: Record<Rol, string> = {
+  administrador: 'Administrador',
+  responsable:   'Responsable de compras',
+  operario:      'Operario de almacén',
+  consultor:     'Consultor',
+};
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private T = 'sf_token';
-  private U = 'sf_usuario';
+  private readonly T = 'sf_token';
+  private readonly U = 'sf_usuario';
 
-  usuarioActual = signal<Usuario | null>(this._cargar());
+  readonly usuarioActual = signal<Usuario | null>(this.cargar());
+  /** Gestiona catálogo, proveedores y pedidos */
+  readonly puedeEditar = computed(() => ['administrador', 'responsable'].includes(this.usuarioActual()?.rol ?? ''));
+  /** Registra entradas, salidas y recepciones */
+  readonly puedeMover  = computed(() => ['administrador', 'responsable', 'operario'].includes(this.usuarioActual()?.rol ?? ''));
 
   constructor(private http: HttpClient, private router: Router) {}
 
@@ -36,13 +49,15 @@ export class AuthService {
     this.router.navigate(['/acceso']);
   }
 
-  getToken()      { return localStorage.getItem(this.T); }
-  estaAutenticado() { return !!this.getToken(); }
-  puedeEditar()   { const r = this.usuarioActual()?.rol; return r === 'administrador' || r === 'responsable'; }
-  esAdmin()       { return this.usuarioActual()?.rol === 'administrador'; }
+  getToken()        { return localStorage.getItem(this.T); }
+  estaAutenticado() { return !!this.getToken() && !!this.usuarioActual(); }
 
-  private _cargar(): Usuario | null {
-    const raw = localStorage.getItem(this.U);
-    return raw ? JSON.parse(raw) : null;
+  private cargar(): Usuario | null {
+    try {
+      const raw = localStorage.getItem(this.U);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   }
 }

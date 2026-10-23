@@ -35,4 +35,8 @@ jobs:
           curl -fs localhost:8080/productos | grep -q '<sf-root'
           curl -fs -X POST localhost:8080/api/sesion -H 'Content-Type: application/json' \
             -d '{"nombre_usuario":"admin","contrasena":"admin123"}' | grep -q '"token"'
-          docker logs app | tail -20
+      - name: Auditoría de la API (roles, permisos y coherencia de datos)
+        run: python3 .github/scripts/api_audit.py
+      - name: Logs del contenedor
+        if: always()
+        run: docker logs app 2>&1 | tail -30

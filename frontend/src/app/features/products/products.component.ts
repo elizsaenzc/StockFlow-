@@ -1,346 +1,206 @@
-import { Component, OnInit, signal } from '@angular/core';
-import { CommonModule }              from '@angular/common';
-import { FormsModule }               from '@angular/forms';
-import { ApiService }                from '../../core/services/api.service';
-import { AuthService }               from '../../core/services/auth.service';
+import { AfterViewInit, Component, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { forkJoin } from 'rxjs';
+import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { MatSort, MatSortModule } from '@angular/material/sort';
+import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatCardModule } from '@angular/material/card';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { AvisosService } from '../../shared/avisos.service';
+import { ConfirmarDialog } from '../../shared/confirmar.dialog';
+import { estadoStock } from '../../shared/estados';
+import { ArticuloDialog } from './articulo.dialog';
+import { MovimientoDialog } from './movimiento.dialog';
 
 @Component({
-  selector: 'sf-products', standalone: true, imports: [CommonModule, FormsModule],
+  selector: 'sf-products',
+  standalone: true,
+  imports: [CurrencyPipe, DecimalPipe, FormsModule, MatTableModule, MatSortModule, MatPaginatorModule, MatFormFieldModule,
+            MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, MatMenuModule, MatCardModule,
+            MatTooltipModule, MatProgressBarModule, MatDialogModule],
   template: `
-    <div class="topbar">
-      <span class="topbar-title">Catálogo de artículos</span>
-      <div class="topbar-right">
+    <div class="page">
+      <div class="page-head">
+        <h1>Artículos</h1>
         @if (auth.puedeEditar()) {
-          <button class="btn btn-jade" (click)="abrirCrear()">Nuevo artículo</button>
-        }
-      </div>
-    </div>
-
-    <div class="page section-gap">
-      <div class="toolbar">
-        <div class="search-wrap">
-          <span class="search-ico" style="font-size:12px">&#9906;</span>
-          <input class="sf-input" placeholder="Referencia, nombre o código de barras..."
-                 [(ngModel)]="filtros.q" (ngModelChange)="resetearYcargar()" />
-        </div>
-        <select class="sf-input" style="width:auto" [(ngModel)]="filtros.familia" (ngModelChange)="resetearYcargar()">
-          <option value="">Todas las familias</option>
-          @for (f of familias(); track f.id) { <option [value]="f.id">{{ f.nombre }}</option> }
-        </select>
-        <select class="sf-input" style="width:auto" [(ngModel)]="filtros.proveedor" (ngModelChange)="resetearYcargar()">
-          <option value="">Todos los proveedores</option>
-          @for (p of proveedores(); track p.id) { <option [value]="p.id">{{ p.nombre }}</option> }
-        </select>
-        <select class="sf-input" style="width:auto" [(ngModel)]="filtros.almacen" (ngModelChange)="resetearYcargar()">
-          <option value="">Todos los almacenes</option>
-          @for (a of almacenes(); track a.id) { <option [value]="a.id">{{ a.nombre }}</option> }
-        </select>
-        <select class="sf-input" style="width:auto" [(ngModel)]="filtros.estado_stock" (ngModelChange)="resetearYcargar()">
-          <option value="">Todos los estados</option>
-          <option value="correcto">Stock correcto</option>
-          <option value="bajo">Stock bajo</option>
-          <option value="sin_stock">Sin stock</option>
-        </select>
-        <div class="spacer"></div>
-        <span class="text-sm text-muted">{{ articulos().length }} de {{ totalArticulos() }} artículos</span>
-        @if (totalArticulos() > pageSize) {
-          <div class="pagination-controls">
-            <button class="btn btn-ghost btn-sm" [disabled]="pagina() === 1" (click)="irPagina(pagina() - 1)">Anterior</button>
-            <span class="text-sm text-muted">Página {{ pagina() }} de {{ totalPaginas() }}</span>
-            <button class="btn btn-ghost btn-sm" [disabled]="pagina() === totalPaginas()" (click)="irPagina(pagina() + 1)">Siguiente</button>
-          </div>
+          <button mat-flat-button color="primary" (click)="editar()"><mat-icon>add</mat-icon> Nuevo artículo</button>
         }
       </div>
 
-      <div class="card" style="padding:0">
-        @if (cargando()) {
-          <div class="spinner-wrap"><div class="spinner"></div></div>
-        } @else if (!articulos().length) {
-          <div class="empty-box"><div class="empty-icon" style="font-size:28px">&#9723;</div><div>Sin artículos para los filtros aplicados</div></div>
-        } @else {
-          <div class="tbl-wrap">
-            <table class="sf-tbl">
-              <thead>
-                <tr>
-                  <th>Referencia</th><th>Artículo</th><th>Familia</th>
-                  <th>Proveedor</th><th>Ubicación</th>
-                  <th>Stock</th><th class="text-right">Coste</th><th class="text-right">P.V.P.</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (a of articulos(); track a.id) {
-                  <tr>
-                    <td>
-                      <div class="mono" style="font-size:11px;color:var(--cobalt);font-weight:600">{{ a.referencia }}</div>
-                      @if (a.cod_barras) { <div class="mono text-muted" style="font-size:9px">{{ a.cod_barras }}</div> }
-                    </td>
-                    <td>
-                      <div style="font-weight:500;font-size:13px">{{ a.nombre }}</div>
-                      @if (a.descripcion) { <div class="text-sm text-muted">{{ a.descripcion }}</div> }
-                    </td>
-                    <td>
-                      @if (a.nombre_familia) {
-                        <span class="badge" [style.background]="a.color_familia + '22'" [style.color]="a.color_familia">
-                          {{ a.nombre_familia }}
-                        </span>
-                      }
-                    </td>
-                    <td class="text-sm text-muted">{{ a.nombre_proveedor ?? '—' }}</td>
-                    <td>
-                      <div class="text-sm">{{ a.nombre_almacen ?? '—' }}</div>
-                      @if (a.ubicacion) { <div class="mono text-muted" style="font-size:10px">{{ a.ubicacion }}</div> }
-                    </td>
-                    <td>
-                      <div style="display:flex;align-items:center;gap:8px">
-                        <div class="stock-bg">
-                          <div class="stock-fill" [class]="'fill-' + claseStock(a)" [style.width]="pctStock(a) + '%'"></div>
-                        </div>
-                        <span class="mono fw-600" [style.color]="colorStock(a)">
-                          {{ a.stock }} <span style="font-weight:400;color:var(--chalk3)">{{ a.unidad }}</span>
-                        </span>
-                      </div>
-                      <div style="font-size:10px;color:var(--chalk3)">mín. {{ a.stock_minimo }}</div>
-                    </td>
-                    <td class="mono text-right">{{ a.precio_coste | currency:'EUR':'symbol':'1.2-2':'es' }}</td>
-                    <td class="mono text-right">{{ a.precio_venta | currency:'EUR':'symbol':'1.2-2':'es' }}</td>
-                    <td>
-                      <div style="display:flex;gap:5px">
-                        <button class="btn btn-ghost btn-sm" (click)="abrirMovimiento(a)">Mover</button>
-                        @if (auth.puedeEditar()) {
-                          <button class="btn btn-ghost btn-sm" (click)="abrirEditar(a)">Editar</button>
-                          <button class="btn btn-danger btn-sm" (click)="confirmarBaja(a)">Baja</button>
-                        }
-                      </div>
-                    </td>
-                  </tr>
+      <div class="filters densa">
+        <mat-form-field class="buscar">
+          <mat-icon matPrefix>search</mat-icon>
+          <mat-label>Buscar</mat-label>
+          <input matInput [(ngModel)]="f.texto" (ngModelChange)="filtrar()" placeholder="Referencia, nombre o código" />
+        </mat-form-field>
+        <mat-form-field><mat-label>Familia</mat-label>
+          <mat-select [(ngModel)]="f.familia" (selectionChange)="filtrar()">
+            <mat-option [value]="null">Todas</mat-option>
+            @for (x of familias(); track x.id) { <mat-option [value]="x.id">{{ x.nombre }}</mat-option> }
+          </mat-select></mat-form-field>
+        <mat-form-field><mat-label>Almacén</mat-label>
+          <mat-select [(ngModel)]="f.almacen" (selectionChange)="filtrar()">
+            <mat-option [value]="null">Todos</mat-option>
+            @for (x of almacenes(); track x.id) { <mat-option [value]="x.id">{{ x.nombre }}</mat-option> }
+          </mat-select></mat-form-field>
+        <mat-form-field><mat-label>Estado del stock</mat-label>
+          <mat-select [(ngModel)]="f.estado" (selectionChange)="filtrar()">
+            <mat-option [value]="null">Todos</mat-option>
+            <mat-option value="Correcto">Correcto</mat-option>
+            <mat-option value="Bajo mínimo">Bajo mínimo</mat-option>
+            <mat-option value="Sin stock">Sin stock</mat-option>
+          </mat-select></mat-form-field>
+        @if (hayFiltros()) { <button mat-button (click)="limpiar()"><mat-icon>filter_alt_off</mat-icon> Limpiar</button> }
+      </div>
+
+      <mat-card class="sf-card flush">
+        @if (cargando()) { <mat-progress-bar mode="indeterminate" /> }
+        <div class="tabla">
+          <table mat-table [dataSource]="datos" matSort matSortActive="nombre" matSortDirection="asc">
+            <ng-container matColumnDef="referencia">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Referencia</th>
+              <td mat-cell *matCellDef="let a"><span class="ref">{{ a.referencia }}</span></td>
+            </ng-container>
+            <ng-container matColumnDef="nombre">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Artículo</th>
+              <td mat-cell *matCellDef="let a"><div class="fuerte">{{ a.nombre }}</div><div class="secundario">{{ a.nombre_familia ?? 'Sin familia' }}</div></td>
+            </ng-container>
+            <ng-container matColumnDef="almacen">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header="nombre_almacen">Ubicación</th>
+              <td mat-cell *matCellDef="let a"><div>{{ a.nombre_almacen ?? '—' }}</div><div class="secundario">{{ a.ubicacion }}</div></td>
+            </ng-container>
+            <ng-container matColumnDef="stock">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">Stock</th>
+              <td mat-cell *matCellDef="let a" class="num"><span class="fuerte">{{ a.stock | number }}</span> {{ a.unidad }}<div class="secundario">mín. {{ a.stock_minimo }}</div></td>
+            </ng-container>
+            <ng-container matColumnDef="estado">
+              <th mat-header-cell *matHeaderCellDef>Estado</th>
+              <td mat-cell *matCellDef="let a"><span [class]="'estado ' + est(a).tono"><mat-icon>{{ est(a).icono }}</mat-icon>{{ est(a).texto }}</span></td>
+            </ng-container>
+            <ng-container matColumnDef="coste">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header="precio_coste" class="num">Coste</th>
+              <td mat-cell *matCellDef="let a" class="num">{{ a.precio_coste | currency }}</td>
+            </ng-container>
+            <ng-container matColumnDef="venta">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header="precio_venta" class="num">PVP</th>
+              <td mat-cell *matCellDef="let a" class="num">{{ a.precio_venta | currency }}</td>
+            </ng-container>
+            <ng-container matColumnDef="acciones">
+              <th mat-header-cell *matHeaderCellDef class="celda-acciones"></th>
+              <td mat-cell *matCellDef="let a" class="celda-acciones">
+                @if (auth.puedeMover()) {
+                  <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{ a: a }" [attr.aria-label]="'Acciones de ' + a.nombre">
+                    <mat-icon>more_vert</mat-icon>
+                  </button>
                 }
-              </tbody>
-            </table>
-          </div>
-        }
-      </div>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="columnas; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: columnas"></tr>
+            <tr class="mat-row" *matNoDataRow>
+              <td class="mat-cell" [attr.colspan]="columnas.length"><div class="vacio"><mat-icon>search_off</mat-icon>No hay artículos con esos filtros</div></td>
+            </tr>
+          </table>
+        </div>
+        <mat-paginator [pageSize]="15" [pageSizeOptions]="[15, 30, 50]" showFirstLastButtons />
+      </mat-card>
     </div>
 
-    @if (modal() === 'crear' || modal() === 'editar') {
-      <div class="modal-overlay" (click)="cerrarOverlay($event)">
-        <div class="modal" style="max-width:680px">
-          <div class="modal-header">
-            <span class="modal-title">{{ modal()==='crear' ? 'Nuevo artículo' : 'Editar · ' + formulario['nombre'] }}</span>
-            <button class="btn btn-ghost btn-icon" (click)="modal.set(null)">&#10005;</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-grid">
-              <div class="form-group"><label class="form-label">Referencia *</label><input class="sf-input" [(ngModel)]="formulario['referencia']" /></div>
-              <div class="form-group"><label class="form-label">Código de barras</label><input class="sf-input" [(ngModel)]="formulario['cod_barras']" placeholder="EAN-13" /></div>
-              <div class="form-group span-2"><label class="form-label">Nombre del artículo *</label><input class="sf-input" [(ngModel)]="formulario['nombre']" /></div>
-              <div class="form-group span-2"><label class="form-label">Descripción</label><input class="sf-input" [(ngModel)]="formulario['descripcion']" /></div>
-              <div class="form-group"><label class="form-label">Familia</label>
-                <select class="sf-input" [(ngModel)]="formulario['familia_id']">
-                  <option [value]="null">Sin asignar</option>
-                  @for (f of familias(); track f.id) { <option [value]="f.id">{{ f.nombre }}</option> }
-                </select>
-              </div>
-              <div class="form-group"><label class="form-label">Proveedor</label>
-                <select class="sf-input" [(ngModel)]="formulario['proveedor_id']">
-                  <option [value]="null">Sin asignar</option>
-                  @for (p of proveedores(); track p.id) { <option [value]="p.id">{{ p.nombre }}</option> }
-                </select>
-              </div>
-              <div class="form-group"><label class="form-label">Unidad de medida</label><input class="sf-input" [(ngModel)]="formulario['unidad']" placeholder="ud, cj, ml, kg..." /></div>
-              <div class="form-group"><label class="form-label">Almacén principal</label>
-                <select class="sf-input" [(ngModel)]="formulario['almacen_id']">
-                  <option [value]="null">Sin asignar</option>
-                  @for (a of almacenes(); track a.id) { <option [value]="a.id">{{ a.nombre }}</option> }
-                </select>
-              </div>
-              <div class="form-group"><label class="form-label">Ubicación / Estantería</label><input class="sf-input" [(ngModel)]="formulario['ubicacion']" placeholder="A-01-3" /></div>
-              <div class="form-group"><label class="form-label">Stock inicial</label><input class="sf-input" type="number" [(ngModel)]="formulario['stock']" /></div>
-              <div class="form-group"><label class="form-label">Stock mínimo</label><input class="sf-input" type="number" [(ngModel)]="formulario['stock_minimo']" /></div>
-              <div class="form-group"><label class="form-label">Stock máximo</label><input class="sf-input" type="number" [(ngModel)]="formulario['stock_maximo']" /></div>
-              <div class="form-group"><label class="form-label">Punto de reorden</label><input class="sf-input" type="number" [(ngModel)]="formulario['punto_reorden']" /></div>
-              <div class="form-group"><label class="form-label">Cant. de reorden</label><input class="sf-input" type="number" [(ngModel)]="formulario['cant_reorden']" /></div>
-              <div class="form-group"><label class="form-label">Precio de coste (€)</label><input class="sf-input" type="number" step="0.01" [(ngModel)]="formulario['precio_coste']" /></div>
-              <div class="form-group"><label class="form-label">Precio de venta (€)</label><input class="sf-input" type="number" step="0.01" [(ngModel)]="formulario['precio_venta']" /></div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-ghost" (click)="modal.set(null)">Cancelar</button>
-            <button class="btn btn-jade" (click)="guardar()" [disabled]="guardando()">{{ guardando() ? 'Guardando...' : 'Guardar cambios' }}</button>
-          </div>
-        </div>
-      </div>
-    }
-
-    @if (modal() === 'movimiento') {
-      <div class="modal-overlay" (click)="cerrarOverlay($event)">
-        <div class="modal" style="max-width:400px">
-          <div class="modal-header">
-            <span class="modal-title">Registrar movimiento</span>
-            <button class="btn btn-ghost btn-icon" (click)="modal.set(null)">&#10005;</button>
-          </div>
-          <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
-            <div style="background:var(--ink3);border-radius:8px;padding:12px;font-size:13px">
-              <strong>{{ artMovimiento()?.nombre }}</strong><br>
-              <span class="text-muted">Stock actual: </span>
-              <strong style="color:var(--jade)">{{ artMovimiento()?.stock }} {{ artMovimiento()?.unidad }}</strong>
-              &nbsp;·&nbsp; <span class="text-muted">Mín.:</span> <strong>{{ artMovimiento()?.stock_minimo }}</strong>
-            </div>
-            <div class="form-group"><label class="form-label">Tipo de movimiento</label>
-              <select class="sf-input" [(ngModel)]="formMovimiento.tipo">
-                <option value="entrada">Entrada de mercancía</option>
-                <option value="salida">Salida de mercancía</option>
-                <option value="ajuste">Ajuste de inventario</option>
-              </select>
-            </div>
-            <div class="form-group"><label class="form-label">Cantidad ({{ artMovimiento()?.unidad }})</label>
-              <input class="sf-input" type="number" min="0.01" step="0.01" [(ngModel)]="formMovimiento.cantidad" />
-            </div>
-            <div class="form-group"><label class="form-label">Motivo</label>
-              <input class="sf-input" [(ngModel)]="formMovimiento.motivo" placeholder="Venta, reposición, ajuste inventario..." />
-            </div>
-            <div class="form-group"><label class="form-label">Referencia documental</label>
-              <input class="sf-input" [(ngModel)]="formMovimiento.referencia" placeholder="ALB-2025-XXX" />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-ghost" (click)="modal.set(null)">Cancelar</button>
-            <button class="btn btn-jade" (click)="guardarMovimiento()" [disabled]="guardando()">{{ guardando() ? '...' : 'Registrar' }}</button>
-          </div>
-        </div>
-      </div>
-    }
-
-    @if (artBaja()) {
-      <div class="modal-overlay" (click)="artBaja.set(null)">
-        <div class="modal" style="max-width:400px">
-          <div class="modal-header"><span class="modal-title">Dar de baja artículo</span></div>
-          <div class="modal-body">
-            <p style="color:var(--chalk2);line-height:1.7">
-              ¿Dar de baja <strong>{{ artBaja()?.nombre }}</strong>? El historial de movimientos se conservará.
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-ghost" (click)="artBaja.set(null)">Cancelar</button>
-            <button class="btn btn-danger" (click)="ejecutarBaja()">Dar de baja</button>
-          </div>
-        </div>
-      </div>
-    }
-  `
+    <mat-menu #menu="matMenu">
+      <ng-template matMenuContent let-a="a">
+        <button mat-menu-item (click)="mover(a)"><mat-icon>swap_horiz</mat-icon><span>Registrar movimiento</span></button>
+        @if (auth.puedeEditar()) {
+          <button mat-menu-item (click)="editar(a)"><mat-icon>edit</mat-icon><span>Editar</span></button>
+          <button mat-menu-item (click)="baja(a)"><mat-icon class="salida">delete</mat-icon><span>Dar de baja</span></button>
+        }
+      </ng-template>
+    </mat-menu>
+  `,
 })
-export class ProductsComponent implements OnInit {
-  articulos      = signal<any[]>([]);
-  familias       = signal<any[]>([]);
-  proveedores    = signal<any[]>([]);
-  almacenes      = signal<any[]>([]);
-  cargando       = signal(true);
-  guardando      = signal(false);
-  modal          = signal<string|null>(null);
-  artMovimiento  = signal<any>(null);
-  artBaja        = signal<any>(null);
-  editandoId: number|null = null;
-  pagina         = signal(1);
-  pageSize       = 20;
-  totalArticulos = signal(0);
-  filtros: any = { q:'', familia:'', proveedor:'', almacen:'', estado_stock:'' };
-  formulario: any = {};
-  formMovimiento = { tipo:'entrada', cantidad:1, motivo:'', referencia:'' };
+export class ProductsComponent implements OnInit, AfterViewInit {
+  auth = inject(AuthService);
+  private api = inject(ApiService);
+  private dialog = inject(MatDialog);
+  private avisos = inject(AvisosService);
 
-  constructor(public auth: AuthService, private api: ApiService) {}
+  @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+
+  datos = new MatTableDataSource<any>([]);
+  familias = signal<any[]>([]);
+  proveedores = signal<any[]>([]);
+  almacenes = signal<any[]>([]);
+  cargando = signal(true);
+  columnas = ['referencia', 'nombre', 'almacen', 'stock', 'estado', 'coste', 'venta', 'acciones'];
+  f: { texto: string; familia: number | null; almacen: number | null; estado: string | null } =
+    { texto: '', familia: null, almacen: null, estado: null };
+
+  est = estadoStock;
 
   ngOnInit() {
+    // Filtro combinado: texto libre + familia + almacén + estado
+    this.datos.filterPredicate = (a, filtro) => {
+      const f = JSON.parse(filtro);
+      const texto = `${a.referencia} ${a.nombre} ${a.cod_barras ?? ''}`.toLowerCase();
+      return (!f.texto || texto.includes(f.texto.toLowerCase()))
+        && (f.familia == null || a.familia_id === f.familia)
+        && (f.almacen == null || a.almacen_id === f.almacen)
+        && (!f.estado || estadoStock(a).texto === f.estado);
+    };
+    forkJoin([this.api.listarFamilias(), this.api.listarProveedores(), this.api.listarAlmacenes()]).subscribe(
+      ([fa, pr, al]) => { this.familias.set(fa); this.proveedores.set(pr); this.almacenes.set(al); });
     this.cargar();
-    this.api.listarFamilias().subscribe(f => this.familias.set(f));
-    this.api.listarProveedores().subscribe(p => this.proveedores.set(p));
-    this.api.listarAlmacenes().subscribe(a => this.almacenes.set(a));
+  }
+
+  ngAfterViewInit() {
+    this.datos.sort = this.sort;
+    this.datos.paginator = this.paginator;
   }
 
   cargar() {
     this.cargando.set(true);
-    const query = { ...this.filtros, page: this.pagina(), pageSize: this.pageSize };
-    this.api.listarArticulos(query).subscribe({
-      next: (res: any) => {
-        if (Array.isArray(res)) {
-          this.articulos.set(res);
-          this.totalArticulos.set(res.length);
-        } else {
-          this.articulos.set(res.items || []);
-          this.totalArticulos.set(res.total || 0);
-        }
-        this.cargando.set(false);
-      },
-      error: () => this.cargando.set(false)
+    this.api.listarArticulos().subscribe({
+      next: a => { this.datos.data = a; this.cargando.set(false); },
+      error: e => { this.avisos.error(e, 'No se pudieron cargar los artículos'); this.cargando.set(false); },
     });
   }
 
-  resetearYcargar() {
-    this.pagina.set(1);
-    this.cargar();
+  filtrar() { this.datos.filter = JSON.stringify(this.f); this.paginator?.firstPage(); }
+  hayFiltros() { return !!(this.f.texto || this.f.familia || this.f.almacen || this.f.estado); }
+  limpiar() { this.f = { texto: '', familia: null, almacen: null, estado: null }; this.filtrar(); }
+
+  editar(articulo?: any) {
+    this.dialog.open(ArticuloDialog, {
+      width: '720px', maxWidth: '95vw',
+      data: { articulo, familias: this.familias(), proveedores: this.proveedores(), almacenes: this.almacenes() },
+    }).afterClosed().subscribe(r => r && this.cargar());
   }
 
-  totalPaginas() {
-    return Math.max(1, Math.ceil(this.totalArticulos() / this.pageSize));
+  mover(articulo: any) {
+    this.dialog.open(MovimientoDialog, { maxWidth: '95vw', data: { articulo } })
+      .afterClosed().subscribe(r => r && this.cargar());
   }
 
-  irPagina(n: number) {
-    const total = this.totalPaginas();
-    if (n < 1 || n > total) return;
-    this.pagina.set(n);
-    this.cargar();
-  }
-
-  abrirCrear() {
-    this.formulario = { referencia:'', cod_barras:'', nombre:'', descripcion:'', unidad:'ud',
-      stock:0, stock_minimo:0, stock_maximo:null, punto_reorden:null, cant_reorden:null,
-      precio_coste:0, precio_venta:0, familia_id:null, proveedor_id:null, almacen_id:null, ubicacion:'' };
-    this.editandoId = null;
-    this.modal.set('crear');
-  }
-
-  abrirEditar(a: any) { this.formulario = { ...a }; this.editandoId = a.id; this.modal.set('editar'); }
-  abrirMovimiento(a: any) {
-    this.artMovimiento.set(a);
-    this.formMovimiento = { tipo:'entrada', cantidad:1, motivo:'', referencia:'' };
-    this.modal.set('movimiento');
-  }
-  confirmarBaja(a: any) { this.artBaja.set(a); }
-
-  guardar() {
-    if (!this.formulario['referencia'] || !this.formulario['nombre']) return;
-    this.guardando.set(true);
-    const req = this.editandoId
-      ? this.api.actualizarArticulo(this.editandoId, this.formulario)
-      : this.api.crearArticulo(this.formulario);
-    req.subscribe({
-      next: () => { this.modal.set(null); this.guardando.set(false); this.cargar(); },
-      error: (e: any) => { alert(e.error?.mensaje ?? 'Error al guardar'); this.guardando.set(false); }
+  baja(a: any) {
+    this.dialog.open(ConfirmarDialog, {
+      data: { titulo: 'Dar de baja', mensaje: `¿Dar de baja «${a.nombre}»? Se conserva su historial de movimientos.`, accion: 'Dar de baja', peligro: true },
+    }).afterClosed().subscribe(ok => {
+      if (!ok) return;
+      this.api.eliminarArticulo(a.id).subscribe({
+        next: () => { this.avisos.ok('Artículo dado de baja'); this.cargar(); },
+        error: e => this.avisos.error(e),
+      });
     });
-  }
-
-  guardarMovimiento() {
-    const a = this.artMovimiento();
-    if (!a) return;
-    this.guardando.set(true);
-    this.api.registrarMovimiento({ articulo_id: a.id, ...this.formMovimiento }).subscribe({
-      next: () => { this.modal.set(null); this.guardando.set(false); this.cargar(); },
-      error: (e: any) => { alert(e.error?.mensaje ?? 'Error'); this.guardando.set(false); }
-    });
-  }
-
-  ejecutarBaja() {
-    const a = this.artBaja();
-    if (!a) return;
-    this.api.eliminarArticulo(a.id).subscribe(() => { this.artBaja.set(null); this.cargar(); });
-  }
-
-  claseStock(a: any) { return a.stock === 0 ? 'out' : a.stock <= a.stock_minimo ? 'low' : 'ok'; }
-  colorStock(a: any) { return a.stock === 0 ? 'var(--coral)' : a.stock <= a.stock_minimo ? 'var(--amber)' : 'var(--jade)'; }
-  pctStock(a: any) {
-    if (!a.stock_maximo) return a.stock > 0 ? 55 : 0;
-    return Math.min(100, (a.stock / a.stock_maximo) * 100);
-  }
-  cerrarOverlay(e: MouseEvent) {
-    if ((e.target as HTMLElement).classList.contains('modal-overlay')) this.modal.set(null);
   }
 }

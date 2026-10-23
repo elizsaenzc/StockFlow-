@@ -1,26 +1,16 @@
-import { Component }         from '@angular/core';
-import { RouterOutlet }      from '@angular/router';
-import { SidebarComponent }  from './shared/components/sidebar/sidebar.component';
-import { AuthService }       from './core/services/auth.service';
-import { CommonModule }      from '@angular/common';
+import { Component }       from '@angular/core';
+import { RouterOutlet }    from '@angular/router';
+import { MatIconRegistry } from '@angular/material/icon';
 
 @Component({
-  selector:    'sf-root',
-  standalone:  true,
-  imports:     [CommonModule, RouterOutlet, SidebarComponent],
-  template: `
-    @if (auth.estaAutenticado()) {
-      <div class="app-shell">
-        <sf-sidebar />
-        <div class="main-area">
-          <router-outlet />
-        </div>
-      </div>
-    } @else {
-      <router-outlet />
-    }
-  `
+  selector:   'sf-root',
+  standalone: true,
+  imports:    [RouterOutlet],
+  template:   `<router-outlet />`,
 })
 export class AppComponent {
-  constructor(public auth: AuthService) {}
+  constructor(iconos: MatIconRegistry) {
+    // Iconos Material Symbols (fuente local del paquete material-symbols)
+    iconos.setDefaultFontSetClass('material-symbols-outlined');
+  }
 }

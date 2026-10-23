@@ -23,8 +23,13 @@ r.get('/analiticas', obtenerAnaliticas);
 
 r.get('/articulos',        listarArticulos);
 r.get('/articulos/:id',    obtenerArticulo);
-r.post('/articulos',       crearArticulo);
-r.put('/articulos/:id',    actualizarArticulo);
+// Roles: administrador y responsable gestionan el catálogo; el operario mueve stock;
+// el consultor solo consulta.
+const GESTION = ['administrador', 'responsable'];
+const ALMACEN = ['administrador', 'responsable', 'operario'];
+
+r.post('/articulos',       requerirRol(...GESTION), crearArticulo);
+r.put('/articulos/:id',    requerirRol(...GESTION), actualizarArticulo);
 r.delete('/articulos/:id', requerirRol('administrador','responsable'), eliminarArticulo);
 
 r.get('/familias',  listarFamilias);
@@ -39,11 +44,11 @@ r.post('/proveedores',     requerirRol('administrador','responsable'), crearProv
 r.put('/proveedores/:id',  requerirRol('administrador','responsable'), actualizarProveedor);
 
 r.get('/movimientos',  listarMovimientos);
-r.post('/movimientos', registrarMovimiento);
+r.post('/movimientos', requerirRol(...ALMACEN), registrarMovimiento);
 
 r.get('/pedidos',                listarPedidos);
 r.post('/pedidos',               requerirRol('administrador','responsable'), crearPedido);
-r.patch('/pedidos/:id/recibir',  recibirPedido);
+r.patch('/pedidos/:id/recibir',  requerirRol(...ALMACEN), recibirPedido);
 r.patch('/pedidos/:id/cancelar', requerirRol('administrador','responsable'), cancelarPedido);
 
 export default r;

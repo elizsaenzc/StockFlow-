@@ -2,6 +2,13 @@ import { run, all, first, guardarBD } from '../db/database.js';
 import { generarToken }               from '../middleware/auth.js';
 import bcrypt                          from 'bcryptjs';
 
+// SQLite guarda las fechas en UTC sin zona ('2026-10-23 18:05:56'): se devuelven en ISO con 'Z'
+// para que el navegador las muestre en hora local.
+const iso = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v) ? v.replace(' ', 'T') + 'Z' : v);
+const conFechas = fila => fila && Object.fromEntries(Object.entries(fila).map(([k, v]) => [k, k.startsWith('fecha') || k === 'ultimo_movimiento' ? iso(v) : v]));
+const filas = lista => lista.map(conFechas);
+const num = v => (v === '' || v === null || v === undefined ? NaN : Number(v));
+
 // ── Autenticación ─────────────────────────────────────────────────────────────
 export function iniciarSesion(req, res) {
   const { nombre_usuario, contrasena } = req.body;
@@ -75,7 +82,7 @@ export function obtenerPanel(req, res) {
     FROM pedidos_compra pc JOIN proveedores p ON p.id=pc.proveedor_id
     WHERE pc.estado IN ('enviado','parcial') ORDER BY pc.fecha_esperada ASC LIMIT 5`);
 
-  res.json({ kpis, movimientosRecientes, articulosCriticos, porFamilia, graficaMovimientos, masMovidos, pedidosPendientes });
+  res.json({ kpis, movimientosRecientes: filas(movimientosRecientes), articulosCriticos, porFamilia, graficaMovimientos, masMovidos, pedidosPendientes });
 }
 
 // ── Artículos ─────────────────────────────────────────────────────────────────
@@ -92,18 +99,19 @@ const SQL_ART = `
 
 export function listarArticulos(req, res) {
   const { q, familia, proveedor, almacen, estado_stock, activo = '1', page, pageSize } = req.query;
-  let sql = SQL_ART + ' WHERE a.activo=?';
+  let where = ' WHERE a.activo=?';
   const args = [Number(activo === 'todos' ? 1 : activo)];
   if (q) {
-    sql += ' AND (a.nombre LIKE ? OR a.referencia LIKE ? OR a.cod_barras LIKE ?)';
+    where += ' AND (a.nombre LIKE ? OR a.referencia LIKE ? OR a.cod_barras LIKE ?)';
     const like = `%${q}%`; args.push(like, like, like);
   }
-  if (familia)      { sql += ' AND a.familia_id=?';   args.push(Number(familia)); }
-  if (proveedor)    { sql += ' AND a.proveedor_id=?'; args.push(Number(proveedor)); }
-  if (almacen)      { sql += ' AND a.almacen_id=?';   args.push(Number(almacen)); }
-  if (estado_stock === 'bajo')       sql += ' AND a.stock>0 AND a.stock<=a.stock_minimo';
-  if (estado_stock === 'sin_stock')  sql += ' AND a.stock=0';
-  if (estado_stock === 'correcto')   sql += ' AND a.stock>a.stock_minimo';
+  if (familia)      { where += ' AND a.familia_id=?';   args.push(Number(familia)); }
+  if (proveedor)    { where += ' AND a.proveedor_id=?'; args.push(Number(proveedor)); }
+  if (almacen)      { where += ' AND a.almacen_id=?';   args.push(Number(almacen)); }
+  if (estado_stock === 'bajo')       where += ' AND a.stock>0 AND a.stock<=a.stock_minimo';
+  if (estado_stock === 'sin_stock')  where += ' AND a.stock=0';
+  if (estado_stock === 'correcto')   where += ' AND a.stock>a.stock_minimo';
+  const sql = SQL_ART + where;
 
   const pageNum = page !== undefined ? Math.max(1, Number(page) || 1) : null;
   const pageSizeNum = pageSize !== undefined ? Math.max(1, Number(pageSize) || 20) : null;
@@ -111,8 +119,7 @@ export function listarArticulos(req, res) {
   if (pageNum !== null || pageSizeNum !== null) {
     const pageValue = pageNum ?? 1;
     const limit = pageSizeNum ?? 20;
-    const extraWhere = sql.indexOf(' AND') >= 0 ? sql.slice(sql.indexOf(' AND')) : '';
-    const total = first(`SELECT COUNT(*) as total FROM articulos a WHERE a.activo=?${extraWhere}`, args)?.total ?? 0;
+    const total = first(`SELECT COUNT(*) as total FROM articulos a${where}`, args)?.total ?? 0;
     const items = all(sql + ' ORDER BY a.nombre LIMIT ? OFFSET ?', [...args, limit, (pageValue - 1) * limit]);
     return res.json({ items, total, page: pageValue, pageSize: limit });
   }
@@ -128,24 +135,28 @@ export function obtenerArticulo(req, res) {
     FROM movimientos m LEFT JOIN almacenes al ON al.id=m.almacen_id
     LEFT JOIN usuarios u ON u.id=m.usuario_id
     WHERE m.articulo_id=? ORDER BY m.fecha DESC LIMIT 12`, [a.id]);
-  res.json({ ...a, movimientos });
+  res.json({ ...a, movimientos: filas(movimientos) });
 }
 
 export function crearArticulo(req, res) {
   const { referencia, cod_barras, nombre, descripcion, familia_id, proveedor_id,
           unidad, stock=0, stock_minimo=0, stock_maximo, punto_reorden, cant_reorden,
           precio_coste=0, precio_venta=0, almacen_id, ubicacion } = req.body;
-  if (!referencia || !nombre)
+  if (!referencia?.trim() || !nombre?.trim())
     return res.status(400).json({ mensaje: 'Referencia y nombre son obligatorios' });
+  if ([stock, stock_minimo, precio_coste, precio_venta].some(v => !(num(v) >= 0)))
+    return res.status(400).json({ mensaje: 'Stock y precios deben ser números positivos' });
+  if (first('SELECT id FROM articulos WHERE referencia=?', [referencia.trim()]))
+    return res.status(409).json({ mensaje: `Ya existe un artículo con la referencia ${referencia}` });
   const r = run(`INSERT INTO articulos
     (referencia,cod_barras,nombre,descripcion,familia_id,proveedor_id,unidad,
      stock,stock_minimo,stock_maximo,punto_reorden,cant_reorden,
      precio_coste,precio_venta,almacen_id,ubicacion) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [referencia, cod_barras||null, nombre, descripcion||null,
+    [referencia.trim(), cod_barras||null, nombre.trim(), descripcion||null,
      familia_id||null, proveedor_id||null, unidad||'ud',
-     stock, stock_minimo, stock_maximo||null, punto_reorden||null, cant_reorden||null,
-     precio_coste, precio_venta, almacen_id||null, ubicacion||null]);
-  if (stock > 0)
+     num(stock), num(stock_minimo), stock_maximo||null, punto_reorden||null, cant_reorden||null,
+     num(precio_coste), num(precio_venta), almacen_id||null, ubicacion||null]);
+  if (num(stock) > 0)
     run(`INSERT INTO movimientos (articulo_id,almacen_id,tipo,cantidad,stock_antes,stock_despues,motivo,usuario_id)
          VALUES (?,?,'entrada',?,0,?,'Alta de artículo nuevo',?)`,
         [r.ultimoId, almacen_id||null, stock, stock, req.usuario.id]);
@@ -217,10 +228,10 @@ export function crearAlmacen(req, res) {
 export function listarProveedores(_req, res) {
   const rows = all('SELECT * FROM proveedores WHERE activo=1 ORDER BY nombre');
   const result = rows.map(p => {
-    const stats = first(`SELECT COUNT(*) AS total_articulos,
-      COUNT(CASE WHEN pc.estado NOT IN ('recibido','cancelado') THEN 1 END) AS pedidos_abiertos
-      FROM pedidos_compra pc WHERE pc.proveedor_id=?`, [p.id]);
-    return { ...p, ...stats };
+    const total_articulos  = first('SELECT COUNT(*) AS n FROM articulos WHERE proveedor_id=? AND activo=1', [p.id])?.n ?? 0;
+    const pedidos_abiertos = first(`SELECT COUNT(*) AS n FROM pedidos_compra
+      WHERE proveedor_id=? AND estado NOT IN ('recibido','cancelado')`, [p.id])?.n ?? 0;
+    return { ...p, total_articulos, pedidos_abiertos };
   });
   res.json(result);
 }
@@ -230,13 +241,15 @@ export function obtenerProveedor(req, res) {
   const articulos = all('SELECT id,referencia,nombre,stock,precio_coste FROM articulos WHERE proveedor_id=? AND activo=1', [p.id]);
   const pedidos   = all(`SELECT pc.*,al.nombre AS nombre_almacen FROM pedidos_compra pc
     LEFT JOIN almacenes al ON al.id=pc.almacen_id WHERE pc.proveedor_id=? ORDER BY pc.fecha_alta DESC LIMIT 10`, [p.id]);
-  res.json({ ...p, articulos, pedidos });
+  res.json({ ...p, articulos, pedidos: filas(pedidos) });
 }
 export function crearProveedor(req, res) {
   const { nombre,contacto,correo,telefono,direccion,pais,plazo_entrega,condiciones_pago,notas } = req.body;
-  if (!nombre) return res.status(400).json({ mensaje: 'Nombre requerido' });
-  const r = run('INSERT INTO proveedores (nombre,contacto,correo,telefono,direccion,pais,plazo_entrega,condiciones_pago,notas) VALUES (?,?,?,?,?,?,?,?,?)',
-    [nombre, contacto||null, correo||null, telefono||null, direccion||null, pais||'España', plazo_entrega||7, condiciones_pago||null, notas||null]);
+  const { puntuacion } = req.body;
+  if (!nombre?.trim()) return res.status(400).json({ mensaje: 'Nombre requerido' });
+  const r = run('INSERT INTO proveedores (nombre,contacto,correo,telefono,direccion,pais,plazo_entrega,condiciones_pago,notas,puntuacion) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    [nombre.trim(), contacto||null, correo||null, telefono||null, direccion||null, pais||'España', num(plazo_entrega) || 7, condiciones_pago||null, notas||null,
+     Math.min(10, Math.max(0, num(puntuacion) || 7))]);
   guardarBD();
   res.status(201).json(first('SELECT * FROM proveedores WHERE id=?', [r.ultimoId]));
 }
@@ -257,7 +270,7 @@ export function actualizarProveedor(req, res) {
 // ── Movimientos ───────────────────────────────────────────────────────────────
 export function listarMovimientos(req, res) {
   const { articulo_id, tipo, almacen_id, desde, hasta, limite=150 } = req.query;
-  let sql = `SELECT m.*, a.nombre AS nombre_articulo, a.referencia, a.unidad,
+  let sql = `SELECT m.*, a.nombre AS nombre_articulo, a.referencia, m.referencia AS documento, a.unidad,
     al.nombre AS nombre_almacen, u.nombre_completo AS nombre_usuario
     FROM movimientos m JOIN articulos a ON a.id=m.articulo_id
     LEFT JOIN almacenes al ON al.id=m.almacen_id LEFT JOIN usuarios u ON u.id=m.usuario_id
@@ -269,16 +282,17 @@ export function listarMovimientos(req, res) {
   if (desde)       { sql += ' AND m.fecha>=?';       args.push(desde); }
   if (hasta)       { sql += ' AND m.fecha<=?';       args.push(hasta + ' 23:59:59'); }
   sql += ' ORDER BY m.fecha DESC LIMIT ?'; args.push(Number(limite));
-  res.json(all(sql, args));
+  res.json(filas(all(sql, args)));
 }
 
 export function registrarMovimiento(req, res) {
-  const { articulo_id, tipo, cantidad, motivo, referencia, almacen_id } = req.body;
-  if (!articulo_id || !tipo || !cantidad)
-    return res.status(400).json({ mensaje: 'articulo_id, tipo y cantidad son obligatorios' });
+  const { articulo_id, tipo, motivo, referencia, almacen_id } = req.body;
+  const cantidad = num(req.body.cantidad);
+  if (!articulo_id || !tipo || Number.isNaN(cantidad))
+    return res.status(400).json({ mensaje: 'Artículo, tipo y cantidad son obligatorios' });
   if (!['entrada','salida','ajuste'].includes(tipo))
-    return res.status(400).json({ mensaje: 'tipo debe ser: entrada, salida o ajuste' });
-  if (cantidad <= 0)
+    return res.status(400).json({ mensaje: 'El tipo debe ser entrada, salida o ajuste' });
+  if (tipo === 'ajuste' ? cantidad < 0 : cantidad <= 0)
     return res.status(400).json({ mensaje: 'La cantidad debe ser mayor que cero' });
 
   const art = first('SELECT * FROM articulos WHERE id=? AND activo=1', [Number(articulo_id)]);
@@ -291,21 +305,23 @@ export function registrarMovimiento(req, res) {
     if (cantidad > antes)
       return res.status(422).json({ mensaje: `Stock insuficiente (disponible: ${antes} ${art.unidad})` });
     despues = antes - cantidad;
-  } else despues = Math.max(0, antes + cantidad);
+  } else despues = cantidad;   // ajuste: la cantidad es el recuento físico
+  if (tipo === 'ajuste' && despues === antes)
+    return res.status(400).json({ mensaje: 'El recuento coincide con el stock actual' });
 
   const r = run(`INSERT INTO movimientos (articulo_id,almacen_id,tipo,cantidad,stock_antes,stock_despues,motivo,referencia,usuario_id)
     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [articulo_id, almacen_id||art.almacen_id, tipo, Math.abs(cantidad), antes, despues,
+    [articulo_id, almacen_id||art.almacen_id, tipo, tipo === 'ajuste' ? Math.abs(despues - antes) : cantidad, antes, despues,
      motivo||null, referencia||null, req.usuario.id]);
   run("UPDATE articulos SET stock=?,fecha_mod=datetime('now') WHERE id=?", [despues, articulo_id]);
   guardarBD();
 
-  const mov = first(`SELECT m.*,a.nombre AS nombre_articulo,a.referencia,a.unidad,
+  const mov = first(`SELECT m.*,a.nombre AS nombre_articulo,a.referencia,m.referencia AS documento,a.unidad,
     al.nombre AS nombre_almacen,u.nombre_completo AS nombre_usuario
     FROM movimientos m JOIN articulos a ON a.id=m.articulo_id
     LEFT JOIN almacenes al ON al.id=m.almacen_id LEFT JOIN usuarios u ON u.id=m.usuario_id
     WHERE m.id=?`, [r.ultimoId]);
-  res.status(201).json(mov);
+  res.status(201).json(conFechas(mov));
 }
 
 // ── Pedidos de compra ─────────────────────────────────────────────────────────
@@ -328,28 +344,33 @@ export function listarPedidos(req, res) {
   if (estado)      { sql += ' AND pc.estado=?';       args.push(estado); }
   if (proveedor_id){ sql += ' AND pc.proveedor_id=?'; args.push(Number(proveedor_id)); }
   sql += ' ORDER BY pc.fecha_alta DESC LIMIT 100';
-  res.json(adjuntarLineas(all(sql, args)));
+  res.json(adjuntarLineas(filas(all(sql, args))));
 }
 
 export function crearPedido(req, res) {
   const { proveedor_id, almacen_id, fecha_esperada, notas, lineas=[] } = req.body;
-  if (!proveedor_id) return res.status(400).json({ mensaje: 'proveedor_id requerido' });
-  if (!lineas.length) return res.status(400).json({ mensaje: 'Se necesita al menos una línea' });
-  const cuenta = first('SELECT COUNT(*) as n FROM pedidos_compra')?.n ?? 0;
-  const numero = `PC-${new Date().getFullYear()}-${String(cuenta+1).padStart(3,'0')}`;
-  const total  = lineas.reduce((s,l) => s + (l.cantidad * l.precio_unitario), 0);
+  if (!proveedor_id || !first('SELECT id FROM proveedores WHERE id=?', [Number(proveedor_id)]))
+    return res.status(400).json({ mensaje: 'Selecciona un proveedor' });
+  const validas = lineas
+    .map(l => ({ articulo_id: Number(l.articulo_id), cantidad: num(l.cantidad), precio_unitario: num(l.precio_unitario) }))
+    .filter(l => l.articulo_id && l.cantidad > 0 && l.precio_unitario >= 0);
+  if (!validas.length || validas.length !== lineas.length)
+    return res.status(400).json({ mensaje: 'Revisa las líneas: cada una necesita artículo, cantidad y precio' });
+  const siguiente = (first('SELECT MAX(id) as n FROM pedidos_compra')?.n ?? 0) + 1;
+  const numero = `PC-${new Date().getFullYear()}-${String(siguiente).padStart(3,'0')}`;
+  const total  = validas.reduce((s,l) => s + (l.cantidad * l.precio_unitario), 0);
   const r = run(`INSERT INTO pedidos_compra (numero_pedido,proveedor_id,almacen_id,fecha_esperada,importe_total,notas,creado_por)
     VALUES (?,?,?,?,?,?,?)`,
     [numero, proveedor_id, almacen_id||null, fecha_esperada||null, total, notas||null, req.usuario.id]);
   const oid = r.ultimoId;
-  lineas.forEach(l => {
+  validas.forEach(l => {
     const artId = first('SELECT id FROM articulos WHERE id=?', [l.articulo_id])?.id;
     if (artId) run('INSERT INTO lineas_pedido (pedido_id,articulo_id,cantidad_pedida,precio_unitario) VALUES (?,?,?,?)',
       [oid, artId, l.cantidad, l.precio_unitario]);
   });
   guardarBD();
   const pc = first(SQL_PC + ' WHERE pc.id=?', [oid]);
-  res.status(201).json({ ...pc, lineas: all('SELECT lp.*,a.nombre AS nombre_articulo,a.referencia,a.unidad FROM lineas_pedido lp JOIN articulos a ON a.id=lp.articulo_id WHERE lp.pedido_id=?',[oid]) });
+  res.status(201).json({ ...conFechas(pc), lineas: all('SELECT lp.*,a.nombre AS nombre_articulo,a.referencia,a.unidad FROM lineas_pedido lp JOIN articulos a ON a.id=lp.articulo_id WHERE lp.pedido_id=?',[oid]) });
 }
 
 export function recibirPedido(req, res) {
@@ -360,10 +381,12 @@ export function recibirPedido(req, res) {
     return res.status(400).json({ mensaje: `Pedido ya en estado: ${pedido.estado}` });
 
   const { lineas=[] } = req.body;
-  lineas.forEach(({ linea_id, cantidad_recibida }) => {
-    if (!cantidad_recibida || cantidad_recibida <= 0) return;
-    const linea = first('SELECT * FROM lineas_pedido WHERE id=?', [linea_id]);
+  lineas.forEach(({ linea_id, cantidad_recibida: pedida }) => {
+    const linea = first('SELECT * FROM lineas_pedido WHERE id=? AND pedido_id=?', [linea_id, oid]);
     if (!linea) return;
+    // No se puede recibir más de lo pendiente en la línea
+    const cantidad_recibida = Math.min(num(pedida), linea.cantidad_pedida - linea.cantidad_recibida);
+    if (!(cantidad_recibida > 0)) return;
     const art = first('SELECT * FROM articulos WHERE id=?', [linea.articulo_id]);
     if (!art) return;
     const antes   = parseFloat(art.stock) || 0;
@@ -381,13 +404,15 @@ export function recibirPedido(req, res) {
   guardarBD();
 
   const actualizado = first(SQL_PC + ' WHERE pc.id=?', [oid]);
-  res.json({ ...actualizado, lineas: all('SELECT lp.*,a.nombre AS nombre_articulo,a.referencia,a.unidad FROM lineas_pedido lp JOIN articulos a ON a.id=lp.articulo_id WHERE lp.pedido_id=?',[oid]) });
+  res.json({ ...conFechas(actualizado), lineas: all('SELECT lp.*,a.nombre AS nombre_articulo,a.referencia,a.unidad FROM lineas_pedido lp JOIN articulos a ON a.id=lp.articulo_id WHERE lp.pedido_id=?',[oid]) });
 }
 
 export function cancelarPedido(req, res) {
   const oid = Number(req.params.id);
-  if (!first('SELECT id FROM pedidos_compra WHERE id=?', [oid]))
-    return res.status(404).json({ mensaje: 'Pedido no encontrado' });
+  const pc = first('SELECT estado FROM pedidos_compra WHERE id=?', [oid]);
+  if (!pc) return res.status(404).json({ mensaje: 'Pedido no encontrado' });
+  if (['recibido', 'cancelado'].includes(pc.estado))
+    return res.status(400).json({ mensaje: `No se puede cancelar un pedido ${pc.estado}` });
   run("UPDATE pedidos_compra SET estado='cancelado',fecha_mod=datetime('now') WHERE id=?", [oid]);
   guardarBD();
   res.json({ mensaje: 'Pedido cancelado' });
@@ -433,5 +458,5 @@ export function obtenerAnaliticas(_req, res) {
     GROUP BY a.id HAVING ultimo_movimiento IS NULL OR ultimo_movimiento<datetime('now','-60 days')
     ORDER BY valor_inmovilizado DESC LIMIT 10`);
 
-  res.json({ rotacion, valorPorFamilia, graficaDiaria, rendimientoProveedores, stockInmovilizado });
+  res.json({ rotacion, valorPorFamilia, graficaDiaria, rendimientoProveedores, stockInmovilizado: filas(stockInmovilizado) });
 }

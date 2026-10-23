@@ -107,79 +107,93 @@ export function seedIfEmpty() {
     ['ART-0035','8424503008004','Imprimación selladora paredes y techos 5 L',  'Base agua, fijador y nivelador',         famId('Pintura y Revestimiento'),   provId('Grupo Pinturas Mediterráneo'), 'ud',   9, 3,  20, 4,   6,14.90, 29.80, aCL, 'H-02-2'],
   ];
 
+  // Algunos artículos por debajo del mínimo para que las alertas tengan contenido
+  const BAJO = ['ART-0005', 'ART-0006', 'ART-0026', 'ART-0033'];
+  const SIN_STOCK = ['ART-0012', 'ART-0021'];
   articulos.forEach(a => {
-    const r = run(`INSERT INTO articulos
+    if (BAJO.includes(a[0]))      a[7] = Math.max(1, a[8] - 2);
+    if (SIN_STOCK.includes(a[0])) a[7] = 0;
+    run(`INSERT INTO articulos
       (referencia,cod_barras,nombre,descripcion,familia_id,proveedor_id,unidad,
        stock,stock_minimo,stock_maximo,punto_reorden,cant_reorden,
        precio_coste,precio_venta,almacen_id,ubicacion)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, a);
-    const aid = r.ultimoId;
-    if (a[7] > 0) {
-      run(`INSERT INTO movimientos (articulo_id,almacen_id,tipo,cantidad,stock_antes,stock_despues,motivo,usuario_id)
-           VALUES (?,?,'entrada',?,0,?,'Alta inicial de artículo',1)`,
-          [aid, a[14], a[7], a[7]]);
-    }
   });
 
-  // ── Movimientos históricos (60 días, realistas) ──────────────────────
+  // ── Movimientos de los últimos 60 días ───────────────────────────────
+  // Se generan hacia atrás desde el stock actual para que el historial cuadre:
+  // el stock_despues de cada movimiento es el stock_antes del siguiente.
   const todosArts = all('SELECT id, stock, almacen_id FROM articulos');
-  const motivos   = [
-    'Entrega cliente ref. PED-2025',
-    'Reposición desde proveedor',
-    'Ajuste tras inventario físico',
-    'Devolución de obra',
-    'Merma por rotura en almacén',
-    'Transferencia entre almacenes',
-    'Suministro a obra Calle Mayor 12',
-    'Consumo interno mantenimiento',
-  ];
-  const referencias = ['ALB-2025-034','ALB-2025-051','OC-2025-007','OC-2025-012','INV-2025-001','TRF-2025-003'];
-  for (let i = 0; i < 180; i++) {
-    const art    = todosArts[i % todosArts.length];
-    const tipo   = i % 3 === 0 ? 'salida' : i % 8 === 0 ? 'ajuste' : 'entrada';
-    const cant   = (i % 7) + 1;
-    const antes  = parseFloat(art.stock) || 0;
-    const despues = tipo === 'salida' ? Math.max(0, antes - cant) : Math.min(antes + cant, 999);
-    const diasAtras = Math.floor(i / 4);
-    const fecha = new Date(); fecha.setDate(fecha.getDate() - diasAtras);
-    const iso   = fecha.toISOString().replace('T', ' ').slice(0, 19);
-    run(`INSERT INTO movimientos
-         (articulo_id,almacen_id,tipo,cantidad,stock_antes,stock_despues,motivo,referencia,usuario_id,fecha)
-         VALUES (?,?,?,?,?,?,?,?,1,?)`,
-        [art.id, art.almacen_id, tipo, cant, antes, despues,
-         motivos[i % motivos.length], referencias[i % referencias.length], iso]);
+  const motivosSalida  = ['Entrega a cliente', 'Suministro a obra Calle Mayor 12', 'Consumo interno mantenimiento', 'Merma por rotura en almacén'];
+  const motivosEntrada = ['Reposición desde proveedor', 'Devolución de obra', 'Transferencia entre almacenes'];
+  const anio = new Date().getFullYear();
+  const fechaHace = (dias, hora) => {
+    const f = new Date(); f.setDate(f.getDate() - dias); f.setHours(hora, (dias * 7) % 60, 0, 0);
+    return f.toISOString().replace('T', ' ').slice(0, 19);
+  };
+
+  // Generador pseudoaleatorio con semilla: datos variados pero siempre iguales entre arranques
+  let semilla = 20250417;
+  const azar = () => { semilla = (semilla * 1664525 + 1013904223) % 4294967296; return semilla / 4294967296; };
+
+  const pendientes = [];
+  const actual = new Map(todosArts.map(a => [a.id, parseFloat(a.stock) || 0]));
+  let n = 0;
+  for (let dias = 0; dias < 60; dias++) {
+    const fecha = new Date(); fecha.setDate(fecha.getDate() - dias);
+    const finde = fecha.getDay() === 0 || fecha.getDay() === 6;
+    const delDia = finde ? Math.floor(azar() * 2) : 2 + Math.floor(azar() * 6);
+    for (let k = 0; k < delDia; k++, n++) {
+      const art  = todosArts[Math.floor(azar() * todosArts.length)];
+      const despues = actual.get(art.id);
+      // Hacia atrás: una salida implica que antes había más; una entrada, que había menos
+      let tipo = azar() < 0.62 ? 'salida' : 'entrada';
+      const cant = tipo === 'salida' ? 1 + Math.floor(azar() * 6) : 4 + Math.floor(azar() * 12);
+      if (tipo === 'entrada' && despues - cant < 0) tipo = 'salida';
+      const antes = tipo === 'salida' ? despues + cant : despues - cant;
+      actual.set(art.id, antes);
+      const motivo = tipo === 'salida' ? motivosSalida[n % motivosSalida.length] : motivosEntrada[n % motivosEntrada.length];
+      const ref = tipo === 'salida' ? `ALB-${anio}-${String(100 + n).padStart(3, '0')}` : `OC-${anio}-${String(1 + (n % 9)).padStart(3, '0')}`;
+      pendientes.push([art.id, art.almacen_id, tipo, cant, antes, despues, motivo, ref, fechaHace(dias, 18 - k)]);   // hacia atrás: horas decrecientes
+    }
   }
+  // Alta inicial de cada artículo con el stock que tenía al principio del periodo
+  todosArts.forEach(a => {
+    const inicial = actual.get(a.id);
+    if (inicial > 0) pendientes.push([a.id, a.almacen_id, 'entrada', inicial, 0, inicial, 'Alta inicial de artículo', null, fechaHace(120, 9)]);
+  });
+  pendientes.forEach(m => run(`INSERT INTO movimientos
+      (articulo_id,almacen_id,tipo,cantidad,stock_antes,stock_despues,motivo,referencia,fecha,usuario_id)
+      VALUES (?,?,?,?,?,?,?,?,?,1)`, m));
 
   // ── Pedidos de compra ─────────────────────────────────────────────────
-  const pedido = (num, prov, alm, estado, esperado, notas, lineas) => {
-    const pid = provId(prov);
-    const aid = almId(alm);
-    const total = lineas.reduce((s, [, , c, q]) => s + (c * q), 0);
+  const fechaEn = dias => { const f = new Date(); f.setDate(f.getDate() + dias); return f.toISOString().slice(0, 10); };
+  const pedido = (n, prov, alm, estado, diasEntrega, diasAlta, notas, lineas) => {
+    const total = lineas.reduce((s, [, q, c]) => s + (q * c), 0);
     const r = run(`INSERT INTO pedidos_compra
-      (numero_pedido,proveedor_id,almacen_id,estado,fecha_esperada,importe_total,notas,creado_por)
-      VALUES (?,?,?,?,?,?,?,1)`,
-      [num, pid, aid, estado, esperado, total, notas]);
-    const oid = r.ultimoId;
+      (numero_pedido,proveedor_id,almacen_id,estado,fecha_esperada,importe_total,notas,creado_por,fecha_alta)
+      VALUES (?,?,?,?,?,?,?,1,?)`,
+      [`PC-${anio}-${String(n).padStart(3, '0')}`, provId(prov), almId(alm), estado, fechaEn(diasEntrega), total, notas, fechaHace(diasAlta, 10)]);
     lineas.forEach(([ref, qty, coste, rcv]) => {
       const artId = first('SELECT id FROM articulos WHERE referencia=?', [ref])?.id;
       if (artId) run(`INSERT INTO lineas_pedido
         (pedido_id,articulo_id,cantidad_pedida,precio_unitario,cantidad_recibida)
-        VALUES (?,?,?,?,?)`, [oid, artId, qty, coste, rcv ?? 0]);
+        VALUES (?,?,?,?,?)`, [r.ultimoId, artId, qty, coste, rcv ?? 0]);
     });
   };
 
-  pedido('PC-2025-001','Ferretería Beltrán y Cía.', 'Almacén Principal',    'recibido', '2025-04-20','Reposición trimestral ferretería',
-    [['ART-0001',20,3.80,20],['ART-0002',30,2.10,30],['ART-0003',25,1.95,25]]);
-  pedido('PC-2025-002','Electrodistribución Ruiz',  'Almacén Principal',    'enviado',  '2025-06-12','Material eléctrico obra nave industrial',
-    [['ART-0006', 8,28.50,0],['ART-0008',20,4.80,0],['ART-0009',40,1.85,0]]);
-  pedido('PC-2025-003','Fontanería García Hnos.',   'Centro Logístico Sur', 'recibido', '2025-05-15','Surtido fontanería Q2',
-    [['ART-0011',10,14.20,10],['ART-0012',25,3.10,25],['ART-0014',30,0.90,30]]);
-  pedido('PC-2025-004','Distribuciones Asturianas', 'Almacén Principal',    'borrador', '2025-07-05','Reposición EPI temporada verano',
-    [['ART-0021',20,4.90,0],['ART-0022',15,7.80,0],['ART-0023',20,3.20,0]]);
-  pedido('PC-2025-005','Grupo Pinturas Mediterráneo','Centro Logístico Sur', 'parcial',  '2025-06-08','Surtido pintura y revestimiento',
-    [['ART-0032',10,19.80,6],['ART-0033', 8,22.00,4],['ART-0034',15,3.80,0]]);
-  pedido('PC-2025-006','Suministros Castellano S.A.','Depósito Norte',       'enviado',  '2025-06-18','Material oficina y EPI mixto',
-    [['ART-0026',30,3.10,0],['ART-0025',12,9.50,0],['ART-0022',10,7.80,0]]);
+  pedido(1, 'Ferretería Beltrán y Cía.',   'Almacén Principal',    'recibido', -20, 30, 'Reposición trimestral ferretería',
+    [['ART-0001', 20, 3.80, 20], ['ART-0002', 30, 2.10, 30], ['ART-0003', 25, 1.95, 25]]);
+  pedido(2, 'Fontanería García Hnos.',     'Centro Logístico Sur', 'recibido', -12, 18, 'Surtido fontanería',
+    [['ART-0011', 10, 14.20, 10], ['ART-0012', 25, 3.10, 25], ['ART-0014', 30, 0.90, 30]]);
+  pedido(3, 'Grupo Pinturas Mediterráneo', 'Centro Logístico Sur', 'parcial',   -2, 12, 'Surtido pintura y revestimiento',
+    [['ART-0032', 10, 19.80, 6], ['ART-0033', 8, 22.00, 4], ['ART-0034', 15, 3.80, 0]]);
+  pedido(4, 'Electrodistribución Ruiz',    'Almacén Principal',    'enviado',     4,  5, 'Material eléctrico obra nave industrial',
+    [['ART-0006', 8, 28.50, 0], ['ART-0008', 20, 4.80, 0], ['ART-0009', 40, 1.85, 0]]);
+  pedido(5, 'Suministros Castellano S.A.', 'Depósito Norte',       'enviado',     8,  3, 'Material de oficina y EPI',
+    [['ART-0026', 30, 3.10, 0], ['ART-0025', 12, 9.50, 0], ['ART-0022', 10, 7.80, 0]]);
+  pedido(6, 'Distribuciones Asturianas',   'Almacén Principal',    'borrador',   15,  1, 'Reposición EPI de temporada',
+    [['ART-0021', 20, 4.90, 0], ['ART-0022', 15, 7.80, 0], ['ART-0023', 20, 3.20, 0]]);
 
   guardarBD();
 }

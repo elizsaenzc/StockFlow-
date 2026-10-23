@@ -13,28 +13,50 @@
           "builder": "@angular-devkit/build-angular:application",
           "options": {
             "outputPath": "dist/stockflow",
-            "index":     "src/index.html",
-            "browser":   "src/main.ts",
-            "polyfills": ["zone.js"],
-            "tsConfig":  "tsconfig.app.json",
-            "assets":    ["src/favicon.ico","src/assets"],
-            "styles":    ["src/styles.scss"],
-            "scripts":   []
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "polyfills": [
+              "zone.js"
+            ],
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              "src/favicon.ico",
+              "src/assets"
+            ],
+            "styles": [
+              "node_modules/@fontsource/roboto/400.css",
+              "node_modules/@fontsource/roboto/500.css",
+              "node_modules/@fontsource/roboto/700.css",
+              "node_modules/material-symbols/outlined.css",
+              "src/styles.scss"
+            ],
+            "scripts": []
           },
           "configurations": {
-            "production":  { "outputHashing": "all" },
-            "development": { "optimization": false, "sourceMap": true }
+            "production": {
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true
+            }
           },
           "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
-            "production":  { "buildTarget": "stockflow:build:production" },
-            "development": { "buildTarget": "stockflow:build:development" }
+            "production": {
+              "buildTarget": "stockflow:build:production"
+            },
+            "development": {
+              "buildTarget": "stockflow:build:development"
+            }
           },
           "defaultConfiguration": "development",
-          "options": { "proxyConfig": "proxy.conf.json" }
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          }
         }
       }
     }
